@@ -70,7 +70,7 @@ class object_tracker(Node):
 
         string_output, outputs, img_ = process_single_frame(self.DNN_model, subscribed_image)
         # data frame: num_of_obj, obj1, obj2, obj3, ...
-        self.msg_.data = str(len(outputs)) + string_output # sth like: 3#1,2#10,20#100,200# ->[1:-1]
+        self.msg_.data = str(len(outputs)) + string_output # sth like: 3#120,200#100,205#50,200# ->[1:-1]
 
         self.data_publisher.publish(self.msg_)
         print(time.time() - last_time)

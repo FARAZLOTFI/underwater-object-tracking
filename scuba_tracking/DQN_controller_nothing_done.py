@@ -15,7 +15,7 @@ from std_msgs.msg import String
 import os, time
 import numpy as np
 ####################################### export PYTHONPATH=/home/USERNAME/sim_ws
-from src.scuba_tracking.scuba_tracking.pid_controller import PID_controller
+from src.scuba_tracking.scuba_tracking.utils import PID_controller, msg_processing
 
 class controller(Node):
 
@@ -58,7 +58,7 @@ class controller(Node):
         #num_of_objs#obj1_bb#obj2_bb#...#
         # check the validity of the coming data (at least three "#" should exist in the message):
         data_list = msg.data.split('#')
-
+        print('data: ',len(data_list), int(data_list[0]))
         if len(data_list)>2:
             num_of_objs = int(data_list[0])
             # let's take the objs center points and the area of the BBs
@@ -71,11 +71,12 @@ class controller(Node):
                 mean_of_obj_locations[2] += (y2 - y1)*(x2 - x1)/num_of_objs
 
             yaw_ref, pitch_ref, speed_ref = self.controller(mean_of_obj_locations)
-            self.direct_command.yaw = yaw_ref
-            self.direct_command.pitch = pitch_ref
-            self.direct_command.speed = speed_ref
-            self.direct_command.roll = 0.0
-            print('speed ref: ', speed_ref)
+
+            # self.direct_command.yaw = yaw_ref
+            # self.direct_command.pitch = pitch_ref
+            # self.direct_command.speed = speed_ref
+            # self.direct_command.roll = 0.0
+            # print('speed ref: ', speed_ref)
 
         else:
             # NO OBJ/ OBJ lost!

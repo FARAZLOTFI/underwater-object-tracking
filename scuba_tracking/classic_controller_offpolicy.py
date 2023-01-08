@@ -14,11 +14,9 @@ from std_msgs.msg import String
 
 import os, time
 import numpy as np
-import xlsxwriter
-import numpy as np 
 ####################################### export PYTHONPATH=/home/USERNAME/sim_ws
 from src.scuba_tracking.scuba_tracking.utils import PID_controller, msg_processing
-import time
+
 class controller(Node):
 
     def __init__(self):
@@ -68,6 +66,15 @@ class controller(Node):
         # CONTROLLER PART
         self.controller = PID_controller()
 
+        self.reset_recovery_variables()
+
+    def reset_recovery_variables(self):
+        # For the Recovery part
+        self.lost_target_step = 0
+        self.rightSideChecked = False
+        self.begin_time = time.time()
+        self.changing_time = 2  # 2 seconds for the beginning
+
     def reward_calculation(self, current_observation):
         try:
             reward = 1 / ((current_observation[0] - 0.5 * self.image_size[0]) ** 2 + 1)
@@ -91,16 +98,16 @@ class controller(Node):
         #1#102.01816,197.34833,214.18144,264.59863#
         #num_of_objs#obj1_bb#obj2_bb#...#
         mean_of_obj_locations = msg_processing(msg)
-
-        if not(mean_of_obj_locations is None):
+        if mean_of_obj_locations[0]>-1:
             if self.single_object_tracking:
                 yaw_ref, pitch_ref, speed_ref = self.controller(mean_of_obj_locations)
+                self.reset_recovery_variables()
             else:
                 pass #TODO -> TWO scuba divers at the same time
         else:
-            # NO OBJ/ OBJ lost!
-            # Here we may implement the part relative to recovery, etc
-            pass
+            # The spiral search strategy
+            yaw_ref = self.search()
+            self.lost_target_step += 1
 
         self.direct_command.yaw = yaw_ref
         self.direct_command.pitch = pitch_ref
@@ -132,6 +139,7 @@ class controller(Node):
                 np.save(self.path_to_gathered_data+'scenario#'+str(self.num_of_experiments), self.batch_for_RL)
 
             self.sample_counter += 1
+
         self.last_time = time.time()  # to have a view of the sampling rate
         self.previous_state = mean_of_obj_locations
     # for log purposes
@@ -139,6 +147,23 @@ class controller(Node):
         x, y, z = msg.x, msg.y, msg.z
 
         #print(x, y, z)
+    def search(self): # return yaw rate - SPIRAL SEARCH
+        # Change the view direction every so often (self.changing_time)
+        if time.time() - self.begin_time>self.changing_time:
+            self.begin_time = time.time()
+            # Note, *2 is not enough as you have to also take into account the arrival time to the origin
+            if self.lost_target_step:
+                self.changing_time = self.changing_time + 2*self.changing_time
+            else:
+                self.changing_time *= 2
+            self.rightSideChecked = not self.rightSideChecked
+
+        if self.rightSideChecked:
+            # right direction
+            return 0.5
+        else:
+            # left direction
+            return -0.5
 
 def main():
 

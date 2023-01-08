@@ -60,12 +60,14 @@ def msg_processing(msg, single_object_tracking = True):
     # check the validity of the coming data (at least three "#" should exist in the message):
     data_list = msg.data.split('#')
 
+    mean_of_obj_locations = -np.ones(
+        3)
+
     if len(data_list) > 2:
         num_of_objs = int(data_list[0])
         if single_object_tracking:
             # let's take the objs center points and the area of the BBs
-            mean_of_obj_locations = np.zeros(
-                3)  # this may include the center points and the areas covered by the objs
+              # this may include the center points and the areas covered by the objs
             for i in range(num_of_objs):
                 # just to ignore the first element as it is the num of objs ([i + 1])
                 x1, y1, x2, y2 = list(map(float, data_list[i + 1].split(',')))
@@ -77,7 +79,7 @@ def msg_processing(msg, single_object_tracking = True):
         else:
             return 0 # TODO
     else:
-        return None
+        return mean_of_obj_locations
 
 
 def main():
