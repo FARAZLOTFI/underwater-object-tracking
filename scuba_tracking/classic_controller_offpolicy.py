@@ -14,6 +14,7 @@ from std_msgs.msg import String
 
 import os, time
 import numpy as np
+import random
 ####################################### export PYTHONPATH=/home/USERNAME/sim_ws
 from src.scuba_tracking.scuba_tracking.utils import PID_controller, msg_processing
 
@@ -32,6 +33,7 @@ class controller(Node):
         ### To gather data while exploring the space by our controller
         self.previous_state = []
         self.batch_for_RL = []
+        self.exploration_mode = True
         self.path_to_gathered_data = './sampled_scenarios/'
         if not os.path.isdir(self.path_to_gathered_data):
             os.mkdir(self.path_to_gathered_data)
@@ -106,8 +108,44 @@ class controller(Node):
                 pass #TODO -> TWO scuba divers at the same time
         else:
             # The spiral search strategy
-            yaw_ref = self.search()
+            ##yaw_ref = self.search()
+            yaw_ref = None
             self.lost_target_step += 1
+
+
+        ## reward calculation
+        reward = self.reward_calculation(mean_of_obj_locations)
+
+        if len(self.previous_state) > 0 and self.exploration_mode:
+            # To save data in an excel file
+            # self.excel_writer.write(self.sample_counter, 0, self.convert_to_str(self.previous_state)) # self.previous_state
+            #
+            # self.excel_writer.write(self.sample_counter, 1, self.convert_to_str([yaw_ref, pitch_ref, speed_ref]))
+            #
+            # self.excel_writer.write(self.sample_counter, 2, self.convert_to_str(mean_of_obj_locations))
+            #
+            # self.excel_writer.write(self.sample_counter, 3, str(reward)) # to preserve the unity
+            # Saving as npy
+            self.batch_for_RL.append([self.previous_state, np.array(self.previous_action),
+                                      mean_of_obj_locations, reward, time.time() - self.last_time])
+
+            if self.sample_counter%400:
+                np.save(self.path_to_gathered_data+'scenario#'+str(self.num_of_experiments), self.batch_for_RL)
+
+            # random exploration 20% chance
+            if np.random.rand()>0.8:
+                if np.random.rand()>0.5:
+                    yaw_ref = random.uniform(0.5, 1)
+                else:
+                    yaw_ref = -random.uniform(0.5, 1)
+
+            if np.random.rand() > 0.80:
+                if np.random.rand()>0.8:
+                    pitch_ref = random.uniform(0.1, 0.5)
+                else:
+                    pitch_ref = -random.uniform(0.1, 0.5)
+
+            self.sample_counter += 1
 
         self.direct_command.yaw = yaw_ref
         self.direct_command.pitch = pitch_ref
@@ -119,29 +157,9 @@ class controller(Node):
         self.command_publisher.publish(self.direct_command)
         self.current_state_publisher.publish(msg)
 
-        ## reward calculation
-        reward = self.reward_calculation(mean_of_obj_locations)
-
-        if len(self.previous_state) > 0:
-            # To save data in an excel file
-            # self.excel_writer.write(self.sample_counter, 0, self.convert_to_str(self.previous_state)) # self.previous_state
-            #
-            # self.excel_writer.write(self.sample_counter, 1, self.convert_to_str([yaw_ref, pitch_ref, speed_ref]))
-            #
-            # self.excel_writer.write(self.sample_counter, 2, self.convert_to_str(mean_of_obj_locations))
-            #
-            # self.excel_writer.write(self.sample_counter, 3, str(reward)) # to preserve the unity
-            # Saving as npy
-            self.batch_for_RL.append([self.previous_state, np.array([yaw_ref, pitch_ref, speed_ref]),
-                                      mean_of_obj_locations, reward, time.time() - self.last_time])
-
-            if self.sample_counter%400:
-                np.save(self.path_to_gathered_data+'scenario#'+str(self.num_of_experiments), self.batch_for_RL)
-
-            self.sample_counter += 1
-
         self.last_time = time.time()  # to have a view of the sampling rate
         self.previous_state = mean_of_obj_locations
+        self.previous_action = [yaw_ref, pitch_ref, speed_ref]
     # for log purposes
     def pose_callback(self, msg):
         x, y, z = msg.x, msg.y, msg.z
