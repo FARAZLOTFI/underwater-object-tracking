@@ -29,7 +29,7 @@ import numpy as np
 from src.scuba_tracking.scuba_tracking.utils import PID_controller, msg_processing
 
 Transition = namedtuple('Transition',
-                                ('state', 'action', 'next_state', 'reward'))
+                                ('state', 'action', 'next_state', 'yaw_reward', 'pitch_reward'))
 
 class controller(Node):
 
@@ -95,21 +95,34 @@ class controller(Node):
 
     def reward_calculation(self, current_observation):
         try:
-            #reward = (1 / (abs(current_observation[0]) + 0.01)) + (1 / (abs(current_observation[1]) + 0.01))
-            if abs(current_observation[0]) < 0.05 and abs(current_observation[1]) < 0.05:
-                # BEE CAREFULLL!!!! TO MAKE THIS EQUAL TO 1 IF YOU ARE TAKING POSITIVE REWARDS
-                reward = 0
+            factor_ = 0.1
+            # yaw part
+            if abs(current_observation[0]) < 0.01:
+                reward = 1
             else:
                 # it's important to keep our rewards smaller than one to have converged Q values
                 # positive reward:
-                ##factor_ = 0.01
-                ##reward = 0.5*factor_*((0.99 / (abs(current_observation[0]) + factor_)) + (0.99 / (abs(current_observation[1]) + factor_)))
+                reward = factor_*(1 / (abs(current_observation[0]) + factor_))
                 # negative reward:
-                reward = -0.5*(abs(current_observation[0]) + abs(current_observation[1]))
+                #reward = -0.49*(abs(current_observation[0]) + abs(current_observation[1]))
+            yaw_reward = reward
+
+            # pitch part
+            if abs(current_observation[1]) < 0.01:
+                reward = 1
+            else:
+                # it's important to keep our rewards smaller than one to have converged Q values
+                # positive reward:
+                reward = factor_*(1 / (abs(current_observation[1]) + factor_))
+                # negative reward:
+                #reward = -0.49*(abs(current_observation[0]) + abs(current_observation[1]))
+            pitch_reward = reward
         except:
             print('object lost! reward = -1')
-            reward = -100
-        return reward
+            yaw_reward = -100
+            pitch_reward = -100
+
+        return yaw_reward, pitch_reward
 
 
     def get_action(self, yaw_rate, pitch_rate,discrete=True):
@@ -187,9 +200,9 @@ class controller(Node):
         # if this is the first time then just save the first state
         if not (len(self.previous_state) == 0):
             ## reward calculation
-            reward = self.reward_calculation(mean_of_obj_locations)
+            yaw_reward, pitch_reward = self.reward_calculation(mean_of_obj_locations)
             # Store the transition in memory self.previous_state, self.previous_action, state, reward
-            self.RL_controller.learn(self.previous_state, self.previous_action, state, reward)
+            self.RL_controller.learn(self.previous_state, self.previous_action, state, yaw_reward, pitch_reward)
 
         self.previous_state = state #TODO check this!!!! to be updated
         self.previous_action = torch.tensor([self.get_action(yaw_ref, pitch_ref)], device=self.device, dtype=torch.long)
@@ -314,7 +327,8 @@ class DQN_approach:
                                            if s is not None])
         state_batch = torch.cat(batch.state)
         action_batch = torch.cat(batch.action)
-        reward_batch = torch.cat(batch.reward)
+        yaw_reward_batch = torch.cat(batch.yaw_reward)
+        pitch_reward_batch = torch.cat(batch.pitch_reward)
 
         # Compute Q(s_t, a) - the model computes Q(s_t), then we select the
         # columns of actions taken. These are the actions which would've been taken
@@ -341,8 +355,8 @@ class DQN_approach:
             next_state_values_yaw[non_final_mask] = outputs[0].max(1)[0]
             next_state_values_pitch[non_final_mask] = outputs[1].max(1)[0]
         # Compute the expected Q values
-        expected_state_action_values_yaw = (next_state_values_yaw * self.GAMMA) + reward_batch
-        expected_state_action_values_pitch = (next_state_values_pitch * self.GAMMA) + reward_batch
+        expected_state_action_values_yaw = (next_state_values_yaw * self.GAMMA) + yaw_reward_batch
+        expected_state_action_values_pitch = (next_state_values_pitch * self.GAMMA) + pitch_reward_batch
 
         # Compute Huber loss
         criterion = nn.SmoothL1Loss()
@@ -361,10 +375,10 @@ class DQN_approach:
 
         return loss
 
-    def learn(self, previous_state, previous_action, state, reward):
+    def learn(self, previous_state, previous_action, state, yaw_reward, pitch_reward):
 
         # Store the transition in memory
-        self.ERM.push(previous_state, previous_action, state, reward)
+        self.ERM.push(previous_state, previous_action, state, yaw_reward, pitch_reward)
 
         #################################################################
         # Perform one step of the optimization (on the policy network)
