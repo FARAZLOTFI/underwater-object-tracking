@@ -79,8 +79,8 @@ class controller(Node):
 
     def reward_calculation(self, current_observation):
         try:
-            reward = 1 / ((current_observation[0] - 0.5 * self.image_size[0]) ** 2 + 1)
-            # + 1 / ((current_observation[1] - 0.5 * self.image_size[1]) ** 2 + 1) MAYBE #TODO
+            reward = (1 / (abs(current_observation[0]) + 0.01)) + (1 / (abs(current_observation[1]) + 0.01))
+
         except:
             print('object lost! reward = -1')
             reward = -1

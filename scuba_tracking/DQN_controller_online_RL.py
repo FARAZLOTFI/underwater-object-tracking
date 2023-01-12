@@ -17,6 +17,7 @@ import torch.nn as nn
 from network import DQN_JOINT
 from torch.utils.tensorboard import SummaryWriter
 from torchsummary import summary
+import torch.optim as optim
 ##################################################
 # if source install/setup.bash the msg_ws -> then
 from ir_msgs.msg import Command
@@ -43,7 +44,6 @@ class controller(Node):
         self.direct_command.pitch = 0.0
 
         ### To gather data while exploring the space by our controller
-        self.obs = []
         self.path_to_gathered_data = './sampled_scenarios/'
         if not os.path.isdir(self.path_to_gathered_data):
             os.mkdir(self.path_to_gathered_data)
@@ -82,7 +82,8 @@ class controller(Node):
         self.obs = np.zeros(self.history_buffer_size * self.num_of_states)
         self.previous_action = []
         self.previous_state = []
-        self.RL_action_list = np.linspace(-0.8, 0.8, self.num_of_actions, True)
+        self.actions_list_yaw = np.linspace(-0.8, 0.8, self.num_of_actions, True)
+        self.actions_list_pitch = np.linspace(-0.4, 0.4, self.num_of_actions, True)
         self.reset_recovery_variables()
 
     def reset_recovery_variables(self):
@@ -94,17 +95,27 @@ class controller(Node):
 
     def reward_calculation(self, current_observation):
         try:
-            reward = (1 / (abs(current_observation[0]) + 0.01)) + (1 / (abs(current_observation[1]) + 0.01))
-
+            #reward = (1 / (abs(current_observation[0]) + 0.01)) + (1 / (abs(current_observation[1]) + 0.01))
+            if abs(current_observation[0]) < 0.05 and abs(current_observation[1]) < 0.05:
+                # BEE CAREFULLL!!!! TO MAKE THIS EQUAL TO 1 IF YOU ARE TAKING POSITIVE REWARDS
+                reward = 0
+            else:
+                # it's important to keep our rewards smaller than one to have converged Q values
+                # positive reward:
+                ##factor_ = 0.01
+                ##reward = 0.5*factor_*((0.99 / (abs(current_observation[0]) + factor_)) + (0.99 / (abs(current_observation[1]) + factor_)))
+                # negative reward:
+                reward = -0.5*(abs(current_observation[0]) + abs(current_observation[1]))
         except:
             print('object lost! reward = -1')
-            reward = -1
+            reward = -100
         return reward
+
 
     def get_action(self, yaw_rate, pitch_rate,discrete=True):
         if discrete:
-            yaw_rate = np.argmin(abs(yaw_rate - self.RL_actions_list))
-            pitch_rate = np.argmin(abs(pitch_rate - self.RL_actions_list))
+            yaw_rate = np.argmin(abs(yaw_rate - self.RL_actions_list_yaw))
+            pitch_rate = np.argmin(abs(pitch_rate - self.RL_actions_list_pitch))
             return yaw_rate, pitch_rate
         else:
             return yaw_rate, pitch_rate
@@ -147,7 +158,7 @@ class controller(Node):
         # 2* is to end up with a value in [-1 , 1]
         current_observation[0] = 2*(current_observation[0] - self.image_size[0] / 2) / self.image_size[0]
         current_observation[1] = 2*(current_observation[1] - self.image_size[1] / 2) / self.image_size[1]
-        current_observation[3] = 2*(current_observation[3] - self.image_area / 2) / self.image_area
+        current_observation[2] = 2*(current_observation[2] - self.image_area / 2) / self.image_area
 
         self.obs[:-self.num_of_states] = self.obs[self.num_of_states:]
         self.obs[-self.num_of_states:] = current_observation
@@ -158,8 +169,8 @@ class controller(Node):
         if ((0.15 * self.image_size[0] < mean_of_obj_locations[0] < 0.85 * self.image_size[0]) and
                 (0.15 * self.image_size[1] < mean_of_obj_locations[1] < 0.85 * self.image_size[1])):
             NN_output = self.RL_controller.select_action(state)
-            yaw_ref = self.RL_actions_list[NN_output[0].view(-1)[0].cpu().detach().numpy()]  # this we don't use now
-            pitch_ref = self.RL_actions_list[NN_output[1].view(-1)[0].cpu().detach().numpy()]  # this we don't use now
+            yaw_ref = self.RL_actions_list_yaw[NN_output[0].view(-1)[0].cpu().detach().numpy()]  # this we don't use now
+            pitch_ref = self.RL_actions_list_pitch[NN_output[1].view(-1)[0].cpu().detach().numpy()]  # this we don't use now
 
         ########################## apply the control to the robot #############################
         self.direct_command.yaw = yaw_ref
@@ -180,7 +191,7 @@ class controller(Node):
             # Store the transition in memory self.previous_state, self.previous_action, state, reward
             self.RL_controller.learn(self.previous_state, self.previous_action, state, reward)
 
-        self.previous_state = state
+        self.previous_state = state #TODO check this!!!! to be updated
         self.previous_action = torch.tensor([self.get_action(yaw_ref, pitch_ref)], device=self.device, dtype=torch.long)
 
 
@@ -316,7 +327,6 @@ class DQN_approach:
         state_action_values = self.policy_net(state_batch)
         state_action_values_yaw = state_action_values[0].gather(1, action_batch[:,0].unsqueeze(-1))
         state_action_values_pitch = state_action_values[1].gather(1, action_batch[:,1].unsqueeze(-1))
-        state_action_values = 0.5 * (state_action_values_yaw + state_action_values_pitch)
 
         # Compute V(s_{t+1}) for all next states.
         # Expected values of actions for non_final_next_states are computed based
@@ -333,12 +343,13 @@ class DQN_approach:
         # Compute the expected Q values
         expected_state_action_values_yaw = (next_state_values_yaw * self.GAMMA) + reward_batch
         expected_state_action_values_pitch = (next_state_values_pitch * self.GAMMA) + reward_batch
-        expected_state_action_values = 0.5*(expected_state_action_values_yaw + expected_state_action_values_pitch)
 
         # Compute Huber loss
         criterion = nn.SmoothL1Loss()
-        loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1))
+        yaw_loss = criterion(state_action_values_yaw, expected_state_action_values_yaw.unsqueeze(1))
+        pitch_loss = criterion(state_action_values_pitch, expected_state_action_values_pitch.unsqueeze(1))
 
+        loss = yaw_loss + pitch_loss
         # Optimize the model
         self.optimizer.zero_grad()
         loss.backward()
