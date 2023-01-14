@@ -18,34 +18,44 @@ class PID_controller:
         self.BB_THRESH = 4500
 
 
-    def __call__(self,current_observation):
-        self.output_update(current_observation)
+    def __call__(self,current_observation, x = None, y = None, area = None):
+        self.output_update(current_observation, x, y, area)
         return self.x_controller_output, self.y_controller_output, self.area_controller_output
 
-    def output_update(self, current_observation):
+    def output_update(self, current_observation, target_x, target_y, area_target):
         # PID controller errors
         # we have three different directions
         # longitudinal
-        area_P = (current_observation[2] - self.BB_THRESH) / (self.image_size[0] * self.image_size[1])
+        if area_target is None:
+            area_target = self.BB_THRESH
+
+        area_P = (current_observation[2] - area_target) / (self.image_size[0] * self.image_size[1])
         area_D = area_P - self.previous_area_P
         area_I = self.integral_filtering * area_P + self.previous_area_P  # FIXME
         self.previous_area_P = area_P
         self.area_controller_output = self.generate_controller_output(self.area_controller_gains, [area_P, area_D, area_I])
 
         # lateral
-        x_P = (current_observation[0] - 0.5 * self.image_size[0]) / self.image_size[0]
+        if target_x is None:
+            target_x = 0.5 * self.image_size[0]
+
+        x_P = (current_observation[0] - target_x) / self.image_size[0]
         x_D = x_P - self.previous_x_P
         x_I = self.integral_filtering * x_P + self.previous_x_P  # FIXME
         self.previous_x_P = x_P
         self.x_controller_output = self.generate_controller_output(self.x_controller_gains, [x_P, x_D, x_I])
 
         # Depth
-        y_P = (current_observation[1] - 0.5 * self.image_size[1]) / self.image_size[1]
+        if target_y is None:
+            target_y = 0.5 * self.image_size[1]
+
+        y_P = (current_observation[1] - target_y) / self.image_size[1]
         y_D = y_P - self.previous_y_P
         y_I = self.integral_filtering * y_P + self.previous_y_P  # FIXME
         self.previous_y_P = y_P
         self.y_controller_output = self.generate_controller_output(self.y_controller_gains, [y_P, y_D, y_I])
 
+        print('controller setpoints: ',target_x, target_y, area_target)
     def generate_controller_output(self, gains, errors):
         kp, ki, kd = gains
         error_p, error_i, error_d = errors

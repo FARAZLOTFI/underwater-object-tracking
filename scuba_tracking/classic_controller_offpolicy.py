@@ -49,6 +49,9 @@ class controller(Node):
         self.single_object_tracking = True
         # let's say it's the indirect distance to the diver
         self.BB_THRESH = 4800
+        self.target_x = None
+        self.target_y = None
+        self.target_area = None
 
         self.vision_output_subscription = self.create_subscription(
             String,
@@ -100,9 +103,23 @@ class controller(Node):
         #1#102.01816,197.34833,214.18144,264.59863#
         #num_of_objs#obj1_bb#obj2_bb#...#
         mean_of_obj_locations = msg_processing(msg)
+        random_target = True # for exploration
+        # by default let's keep the target at the center
+        if not random_target:
+            self.target_x = None
+            self.target_y = None
+            self.target_area = None
+        else:
+            # Otherwise, for exploration purposes
+            if self.sample_counter%250 == 0 :
+                self.target_x = np.random.randint(0.45*self.image_size[0], 0.55*self.image_size[0])
+                self.target_y = np.random.randint(0.45*self.image_size[1], 0.55*self.image_size[1])
+                self.target_area = np.random.randint(0.7*self.BB_THRESH, 0.8*self.BB_THRESH)
+                print('Target updated! ',[self.target_x,self.target_y,self.target_area])
+
         if mean_of_obj_locations[0]>-1:
             if self.single_object_tracking:
-                yaw_ref, pitch_ref, speed_ref = self.controller(mean_of_obj_locations)
+                yaw_ref, pitch_ref, speed_ref = self.controller(mean_of_obj_locations, self.target_x, self.target_y, self.target_area)
                 self.reset_recovery_variables()
             else:
                 pass #TODO -> TWO scuba divers at the same time
@@ -133,14 +150,14 @@ class controller(Node):
                 np.save(self.path_to_gathered_data+'scenario#'+str(self.num_of_experiments), self.batch_for_RL)
 
             # random exploration 20% chance
-            if np.random.rand()>0.8:
+            if np.random.rand()>0.6:
                 if np.random.rand()>0.5:
                     yaw_ref = random.uniform(0.5, 1)
                 else:
                     yaw_ref = -random.uniform(0.5, 1)
 
-            if np.random.rand() > 0.80:
-                if np.random.rand()>0.8:
+            if np.random.rand() > 0.6:
+                if np.random.rand()>0.5:
                     pitch_ref = random.uniform(0.1, 0.5)
                 else:
                     pitch_ref = -random.uniform(0.1, 0.5)
