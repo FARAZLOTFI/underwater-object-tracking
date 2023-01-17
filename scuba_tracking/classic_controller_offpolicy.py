@@ -16,7 +16,7 @@ import os, time
 import numpy as np
 import random
 ####################################### export PYTHONPATH=/home/USERNAME/sim_ws
-from src.scuba_tracking.scuba_tracking.utils import PID_controller, msg_processing
+from src.scuba_tracking.scuba_tracking.utils.controller_utils import PID_controller, msg_processing
 
 class controller(Node):
 
@@ -33,7 +33,7 @@ class controller(Node):
         ### To gather data while exploring the space by our controller
         self.previous_state = []
         self.batch_for_RL = []
-        self.exploration_mode = True
+        self.exploration_mode = False
         self.path_to_gathered_data = './sampled_scenarios/'
         if not os.path.isdir(self.path_to_gathered_data):
             os.mkdir(self.path_to_gathered_data)
@@ -126,7 +126,7 @@ class controller(Node):
         else:
             # The spiral search strategy
             ##yaw_ref = self.search()
-            yaw_ref = None
+            yaw_ref = 0.0
             self.lost_target_step += 1
 
 
