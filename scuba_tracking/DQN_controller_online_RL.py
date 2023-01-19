@@ -27,7 +27,7 @@ from std_msgs.msg import String
 import os, time
 import numpy as np
 ####################################### export PYTHONPATH=/home/USERNAME/sim_ws
-from src.scuba_tracking.scuba_tracking.utils import PID_controller, msg_processing
+from src.scuba_tracking.scuba_tracking.utils.controller_utils import PID_controller, msg_processing
 
 Transition = namedtuple('Transition',
                                 ('state', 'action', 'next_state', 'yaw_reward', 'pitch_reward'))
