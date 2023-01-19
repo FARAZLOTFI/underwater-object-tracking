@@ -14,7 +14,8 @@ import random
 import math
 import torch
 import torch.nn as nn
-from network import DQN_JOINT
+
+from src.scuba_tracking.scuba_tracking.RL_network import DQN_JOINT
 from torch.utils.tensorboard import SummaryWriter
 from torchsummary import summary
 import torch.optim as optim
@@ -42,23 +43,20 @@ class controller(Node):
         self.direct_command.yaw = 0.0
         self.direct_command.heave = 0.0
         self.direct_command.pitch = 0.0
-
-        ### To gather data while exploring the space by our controller
-        self.path_to_gathered_data = './sampled_scenarios/'
-        if not os.path.isdir(self.path_to_gathered_data):
-            os.mkdir(self.path_to_gathered_data)
-            self.num_of_experiments = 0
-        else:
-            self.num_of_experiments = len(os.listdir(self.path_to_gathered_data))
+        self.trajectory = []
         #workbook = xlsxwriter.Workbook('scuba_tracking#1.xlsx')
         #self.excel_writer = workbook.add_worksheet()
         self.sample_counter = 0
 
         self.debug = True
         self.image_size = (400,300)
+        self.image_area = self.image_size[0]*self.image_size[1]
         self.single_object_tracking = True
         # let's say it's the indirect distance to the diver
-        self.BB_THRESH = 4800
+        self.BB_THRESH = 5500
+        self.target_x = None
+        self.target_y = None
+        self.target_area = None
 
         self.vision_output_subscription = self.create_subscription(
             String,
@@ -79,51 +77,76 @@ class controller(Node):
         self.controller = PID_controller()
         # RL Controller
         self.RL_controller = DQN_approach()
-        self.obs = np.zeros(self.history_buffer_size * self.num_of_states)
+        self.obs = np.zeros(self.RL_controller.history_buffer_size * self.RL_controller.num_of_states)
         self.previous_action = []
         self.previous_state = []
-        self.actions_list_yaw = np.linspace(-0.8, 0.8, self.num_of_actions, True)
-        self.actions_list_pitch = np.linspace(-0.4, 0.4, self.num_of_actions, True)
+
+        self.RL_actions_list_yaw = np.linspace(-0.3, 0.3, self.RL_controller.num_of_actions, True)
+        self.RL_actions_list_pitch = np.linspace(-0.1, 0.1, self.RL_controller.num_of_actions, True)
         self.reset_recovery_variables()
 
-    def reset_recovery_variables(self):
+    # We take the last object location to have an estimation of where it should be if was lost
+    def reset_recovery_variables(self, last_obj_location=None):
         # For the Recovery part
         self.lost_target_step = 0
-        self.rightSideChecked = False
-        self.begin_time = time.time()
-        self.changing_time = 2  # 2 seconds for the beginning
+        self.begin_time_right = time.time()
+        self.begin_time_up = time.time()
+
+        self.changing_time_right = 3  # 2 seconds for the beginning
+        self.changing_time_up = 3  # 2 seconds for the beginning
+
+        if last_obj_location is not None:
+            # we add a 10 pixel threshold to increase the certainty
+            if last_obj_location[0]>(self.image_size[0]/2 + 10):
+                self.rightSideChecked = False
+            else:
+                self.rightSideChecked = True
+            # instead of 10 we use 5 pixel threshold as height is smaller than width
+            if last_obj_location[1]>(self.image_size[1]/2 + 5):
+                self.upSideChecked = True
+            else:
+                self.upSideChecked = False
+
+        else:
+            self.rightSideChecked = False
+            self.upSideChecked = False
 
     def reward_calculation(self, current_observation):
         try:
             factor_ = 0.1
             # yaw part
-            if abs(current_observation[0]) < 0.01:
+            if abs(current_observation[0]) < 0.05:
                 reward = 1
             else:
                 # it's important to keep our rewards smaller than one to have converged Q values
                 # positive reward:
                 reward = factor_*(1 / (abs(current_observation[0]) + factor_))
                 # negative reward:
-                #reward = -0.49*(abs(current_observation[0]) + abs(current_observation[1]))
+                ##reward = -0.5*(abs(current_observation[0]))
             yaw_reward = reward
 
+            # for out of plane cases
+            if abs(current_observation[0])>0.95:
+                yaw_reward = -0.1
+            #####################################################################
             # pitch part
-            if abs(current_observation[1]) < 0.01:
+            if abs(current_observation[1]) < 0.05:
                 reward = 1
             else:
                 # it's important to keep our rewards smaller than one to have converged Q values
                 # positive reward:
                 reward = factor_*(1 / (abs(current_observation[1]) + factor_))
                 # negative reward:
-                #reward = -0.49*(abs(current_observation[0]) + abs(current_observation[1]))
+                ##reward = -0.5*(abs(current_observation[1]))
             pitch_reward = reward
+            if abs(current_observation[1])>0.95:
+                pitch_reward = -0.1
         except:
             print('object lost! reward = -1')
-            yaw_reward = -100
-            pitch_reward = -100
+            yaw_reward = -1
+            pitch_reward = -1
 
         return yaw_reward, pitch_reward
-
 
     def get_action(self, yaw_rate, pitch_rate,discrete=True):
         if discrete:
@@ -141,17 +164,45 @@ class controller(Node):
         #1#102.01816,197.34833,214.18144,264.59863#
         #num_of_objs#obj1_bb#obj2_bb#...#
         mean_of_obj_locations = msg_processing(msg)
+        random_target = False # for exploration
+        # by default let's keep the target at the center
+        if not random_target:
+            self.target_x = None
+            self.target_y = None
+            self.target_area = None
+        else:
+            # Otherwise, for exploration purposes
+            if self.sample_counter%1000 == 0 :
+                self.target_x = np.random.randint(0.3*self.image_size[0], 0.7*self.image_size[0])
+                self.target_y = np.random.randint(0.4*self.image_size[1], 0.6*self.image_size[1])
+                self.target_area = np.random.randint(0.7*self.BB_THRESH, 0.8*self.BB_THRESH)
+                print('Target updated! ',[self.target_x,self.target_y,self.target_area])
+
         if mean_of_obj_locations[0]>-1:
             if self.single_object_tracking:
-
-                yaw_ref, pitch_ref, speed_ref = self.controller(mean_of_obj_locations)
+                yaw_ref, pitch_ref, speed_ref = self.controller(mean_of_obj_locations, self.target_x, self.target_y, self.target_area)
+                #print('PID: ', [yaw_ref, pitch_ref])
                 ################## For the recovery part #######################
-                self.reset_recovery_variables()
+                self.reset_recovery_variables(mean_of_obj_locations)
             else:
                 pass #TODO -> TWO scuba divers at the same time
         else:
             # The spiral search strategy
-            yaw_ref = self.search()
+            yaw_ref, pitch_ref = self.search()
+            # in this short part for cases of lost target we use an artifical input for the RL controller
+            # this is to make the neural network aware of the target being lost
+            if self.rightSideChecked: # it has been lost on the left side
+                right_seen = 0.0
+            else:
+                right_seen = self.image_size[0]
+
+            if self.upSideChecked:  # it has been lost on the left side
+                up_seen = self.image_size[1]
+            else:
+                up_seen = 0
+
+            #-25 is set based on the noises considered in the following
+            mean_of_obj_locations = np.array([right_seen, up_seen, -25.0])
             self.lost_target_step += 1
 
         ######################### preparing the input for RL ################################
@@ -159,7 +210,7 @@ class controller(Node):
         bb_noise_x = np.random.randint(0, 5)
         bb_noise_y = np.random.randint(0, 5)
         area_noise = bb_noise_x * bb_noise_y  # this I think must be dependent on the two previous ones
-        speed_noise = 0.02 * np.random.rand(3)
+        speed_noise = 0.02 * np.random.rand() # 3
 
         current_observation = np.array([mean_of_obj_locations[0] + bb_noise_x,
                                         mean_of_obj_locations[1] + bb_noise_y,
@@ -169,29 +220,31 @@ class controller(Node):
         # now normalization
         # TODO no normalization on the  velocities :| lin_vel > 1 ???!
         # 2* is to end up with a value in [-1 , 1]
+
         current_observation[0] = 2*(current_observation[0] - self.image_size[0] / 2) / self.image_size[0]
         current_observation[1] = 2*(current_observation[1] - self.image_size[1] / 2) / self.image_size[1]
         current_observation[2] = 2*(current_observation[2] - self.image_area / 2) / self.image_area
 
-        self.obs[:-self.num_of_states] = self.obs[self.num_of_states:]
-        self.obs[-self.num_of_states:] = current_observation
+        self.obs[:-self.RL_controller.num_of_states] = self.obs[self.RL_controller.num_of_states:]
+        self.obs[-self.RL_controller.num_of_states:] = current_observation
 
-        state = torch.tensor(self.obs, dtype=torch.float32, device=self.device).unsqueeze(0)
+        state = torch.tensor(self.obs, dtype=torch.float32, device=self.RL_controller.device).unsqueeze(0)
 
         ############# check the situation to be controllable by RL at low risk of losing the target #############
-        if ((0.15 * self.image_size[0] < mean_of_obj_locations[0] < 0.85 * self.image_size[0]) and
-                (0.15 * self.image_size[1] < mean_of_obj_locations[1] < 0.85 * self.image_size[1])):
+        if ((0.0 * self.image_size[0] < mean_of_obj_locations[0] < 1 * self.image_size[0]) and
+                (0.0 * self.image_size[1] < mean_of_obj_locations[1] < 1 * self.image_size[1])) and np.random.rand()>0:
             NN_output = self.RL_controller.select_action(state)
             yaw_ref = self.RL_actions_list_yaw[NN_output[0].view(-1)[0].cpu().detach().numpy()]  # this we don't use now
             pitch_ref = self.RL_actions_list_pitch[NN_output[1].view(-1)[0].cpu().detach().numpy()]  # this we don't use now
-
+            print('RL: ',[yaw_ref,pitch_ref])
         ########################## apply the control to the robot #############################
-        self.direct_command.yaw = yaw_ref
-        self.direct_command.pitch = pitch_ref
+        self.direct_command.yaw = yaw_ref #>0 right 
+        self.direct_command.pitch = pitch_ref #>0 down
         self.direct_command.speed = speed_ref
         self.direct_command.roll = 0.0
         if self.debug:
             print('speed ref: ', speed_ref)
+            pass
 
         self.command_publisher.publish(self.direct_command)
         self.current_state_publisher.publish(msg)
@@ -200,36 +253,66 @@ class controller(Node):
         # if this is the first time then just save the first state
         if not (len(self.previous_state) == 0):
             ## reward calculation
-            yaw_reward, pitch_reward = self.reward_calculation(mean_of_obj_locations)
+            yaw_reward, pitch_reward = self.reward_calculation(current_observation)
+            print('rewards: ',yaw_reward,pitch_reward)
             # Store the transition in memory self.previous_state, self.previous_action, state, reward
-            self.RL_controller.learn(self.previous_state, self.previous_action, state, yaw_reward, pitch_reward)
 
-        self.previous_state = state #TODO check this!!!! to be updated
-        self.previous_action = torch.tensor([self.get_action(yaw_ref, pitch_ref)], device=self.device, dtype=torch.long)
 
+            self.RL_controller.ERM.push(self.previous_state, self.previous_action, self.obs, yaw_reward, pitch_reward)
+            if self.sample_counter % 1000 == 0:
+                np.save(self.RL_controller.path_to_gathered_data + str(self.RL_controller.num_of_experiments), self.RL_controller.ERM.memory)
+                print('ERM saved!')
+                np.save(self.RL_controller.path_to_gathered_data + 'scenario#' +str(self.RL_controller.num_of_experiments), self.trajectory)
+            self.RL_controller.learn()
+
+            # the sample counter is used to update a random target for the PID controllers
+            self.sample_counter += 1
+
+        self.previous_state = np.zeros(len(self.obs))
+        self.previous_state = self.previous_state + self.obs #TODO check this!!!! to be updated
+        self.previous_action = self.get_action(yaw_ref, pitch_ref)
+        #print('locations: ',mean_of_obj_locations)
 
     # for log purposes
     def pose_callback(self, msg):
         x, y, z = msg.x, msg.y, msg.z
-
+        self.trajectory.append([x,y,z])
         #print(x, y, z)
     def search(self): # return yaw rate - SPIRAL SEARCH
         # Change the view direction every so often (self.changing_time)
-        if time.time() - self.begin_time>self.changing_time:
-            self.begin_time = time.time()
+        if time.time() - self.begin_time_right>self.changing_time_right:
+            self.begin_time_right = time.time()
             # Note, *2 is not enough as you have to also take into account the arrival time to the origin
-            if self.lost_target_step:
-                self.changing_time = self.changing_time + 2*self.changing_time
+            if self.lost_target_step == 0:
+                self.changing_time_right = self.changing_time_right + 2*self.changing_time_right
             else:
-                self.changing_time *= 2
-            self.rightSideChecked = not self.rightSideChecked
+                self.changing_time_right *= 2
+                self.rightSideChecked = not self.rightSideChecked
 
+        if time.time() - self.begin_time_up>self.changing_time_up:
+            self.begin_time_up = time.time()
+            # Note, *2 is not enough as you have to also take into account the arrival time to the origin
+            if self.lost_target_step == 0:
+                self.changing_time_up = self.changing_time_up + 2*self.changing_time_up
+            else:
+                self.changing_time_up *= 2
+                self.upSideChecked = not self.upSideChecked
+
+        yaw_rate = 0
+        pitch_rate = 0
         if self.rightSideChecked:
             # right direction
-            return 0.5
+            yaw_rate = -0.2
         else:
             # left direction
-            return -0.5
+            yaw_rate = 0.2
+
+        if self.upSideChecked:
+            # go to the down direction
+            pitch_rate = 0.1
+        else:
+            pitch_rate = -0.1
+        return yaw_rate, pitch_rate
 
 class DQN_approach:
     def __init__(self):
@@ -253,21 +336,28 @@ class DQN_approach:
         if self.debug_mode:
             summary(self.policy_net, (1, self.obs_dim))
 
-        self.CHECKPOINT_PATH = './trained_models/training_checkpoint'
+        self.CHECKPOINT_PATH = './RL_checkpoint/training_checkpoint'
 
-        try:
+        if True:
             checkpoint = torch.load(self.CHECKPOINT_PATH, map_location=self.device)
             self.policy_net.load_state_dict(checkpoint['model_state_dict_policy'], strict=True)
             self.target_net.load_state_dict(checkpoint['model_state_dict_target'], strict=True)
             self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             self.starting_episode = checkpoint['TRAINING_STEP']
             print('Weights loaded!')
-        except:
+        else:
             print('No checkpoint found!')
             self.starting_episode = 0
 
-        self.min_ERM_size = 10000
         self.writer_train = SummaryWriter('./runs/training')
+
+        ### To gather data while exploring the space by our controller
+        self.path_to_gathered_data = './sampled_scenarios_from_RL_agent/'
+        if not os.path.isdir(self.path_to_gathered_data):
+            os.mkdir(self.path_to_gathered_data)
+            self.num_of_experiments = 0
+        else:
+            self.num_of_experiments = len(os.listdir(self.path_to_gathered_data))
 
     def _init_hyperparameters(self):
         # BATCH_SIZE is the number of transitions sampled from the replay buffer
@@ -278,17 +368,17 @@ class DQN_approach:
         # TAU is the update rate of the target network
         # LR is the learning rate of the AdamW optimizer
         self.BATCH_SIZE = 50
-        self.GAMMA = 0.99
+        self.GAMMA = 0.5
         self.EPS_START = 0.9
         self.EPS_END = 0.05
         self.EPS_DECAY = 1000
         self.TAU = 0.005
-        self.LR = 1e-4
+        self.LR = 2e-5
         self.ACTION_SCALER = 2
         self.num_episodes = 50000
 
     def reset(self):
-        self.ERM = ReplayMemory(30000)
+        self.ERM = ReplayMemory(2000)
         self.steps_done = 0
 
     def select_action(self,state):
@@ -296,7 +386,7 @@ class DQN_approach:
         sample = random.random()
         eps_threshold = self.EPS_END + (self.EPS_START - self.EPS_END) * \
                         math.exp(-1. * self.steps_done / self.EPS_DECAY)
-        if sample > eps_threshold:
+        if np.random.rand()>0.9:#sample > eps_threshold:
             with torch.no_grad():
                 # t.max(1) will return largest column value of each row.
                 # second column on max result is index of where max element was
@@ -310,7 +400,7 @@ class DQN_approach:
 
 
     def optimize_model(self):
-        if len(self.ERM) < (self.min_ERM_size):
+        if len(self.ERM) < self.BATCH_SIZE:
             return
 
         transitions = self.ERM.sample(self.BATCH_SIZE)
@@ -321,15 +411,16 @@ class DQN_approach:
 
         # Compute a mask of non-final states and concatenate the batch elements
         # (a final state would've been the one after which simulation ended)
-        non_final_mask = torch.tensor(tuple(map(lambda s: s is not None,
-                                                batch.next_state)), device=self.device, dtype=torch.bool)
-        non_final_next_states = torch.cat([s for s in batch.next_state
-                                           if s is not None])
-        state_batch = torch.cat(batch.state)
-        action_batch = torch.cat(batch.action)
-        yaw_reward_batch = torch.cat(batch.yaw_reward)
-        pitch_reward_batch = torch.cat(batch.pitch_reward)
+        try:
+            non_final_next_states = torch.tensor(batch.next_state,device=self.device, dtype=torch.float32)
+            state_batch = torch.tensor(batch.state, device=self.device, dtype=torch.float32)
+            action_batch = torch.tensor(batch.action, device=self.device, dtype=torch.long)
+            yaw_reward_batch = torch.tensor(batch.yaw_reward,device=self.device, dtype=torch.float32)
+            pitch_reward_batch = torch.tensor(batch.pitch_reward, device=self.device, dtype=torch.float32)
 
+        except:
+            #print('Could not use this batch!!!! there has been a None value there')
+            return
         # Compute Q(s_t, a) - the model computes Q(s_t), then we select the
         # columns of actions taken. These are the actions which would've been taken
         # for each batch state according to policy_net
@@ -347,13 +438,11 @@ class DQN_approach:
         # on the "older" target_net; selecting their best reward with max(1)[0].
         # This is merged based on the mask, such that we'll have either the expected
         # state value or 0 in case the state was final.
-        next_state_values_yaw = torch.zeros(self.BATCH_SIZE, device=self.device)
-        next_state_values_pitch = torch.zeros(self.BATCH_SIZE, device=self.device)
 
         with torch.no_grad():
             outputs = self.target_net(non_final_next_states)
-            next_state_values_yaw[non_final_mask] = outputs[0].max(1)[0]
-            next_state_values_pitch[non_final_mask] = outputs[1].max(1)[0]
+            next_state_values_yaw = outputs[0].max(1)[0]
+            next_state_values_pitch = outputs[1].max(1)[0]
         # Compute the expected Q values
         expected_state_action_values_yaw = (next_state_values_yaw * self.GAMMA) + yaw_reward_batch
         expected_state_action_values_pitch = (next_state_values_pitch * self.GAMMA) + pitch_reward_batch
@@ -364,21 +453,18 @@ class DQN_approach:
         pitch_loss = criterion(state_action_values_pitch, expected_state_action_values_pitch.unsqueeze(1))
 
         loss = yaw_loss + pitch_loss
+
         # Optimize the model
         self.optimizer.zero_grad()
         loss.backward()
         # In-place gradient clipping
         torch.nn.utils.clip_grad_value_(self.policy_net.parameters(), 100)
         self.optimizer.step()
-
         self.steps_done += 1
 
         return loss
 
-    def learn(self, previous_state, previous_action, state, yaw_reward, pitch_reward):
-
-        # Store the transition in memory
-        self.ERM.push(previous_state, previous_action, state, yaw_reward, pitch_reward)
+    def learn(self):
 
         #################################################################
         # Perform one step of the optimization (on the policy network)
@@ -396,7 +482,7 @@ class DQN_approach:
                         1 - self.TAU)
         self.target_net.load_state_dict(target_net_state_dict)
 
-        if self.steps_done%10:
+        if self.steps_done%100:
             torch.save({
                 'TRAINING_STEP': self.steps_done,
                 'model_state_dict_policy': self.policy_net.state_dict(),

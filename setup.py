@@ -21,7 +21,8 @@ setup(
     entry_points={
         'console_scripts': ['gathering_data = scuba_tracking.gathering_dataset:main',
         'vision_module = scuba_tracking.object_tracker:main',
-        'controller = scuba_tracking.classic_controller_offpolicy:main'
+        'PID_controller = scuba_tracking.classic_controller_offpolicy:main',
+        'RL_controller = scuba_tracking.DQN_controller_online_RL:main'
         ],
     },
 )
