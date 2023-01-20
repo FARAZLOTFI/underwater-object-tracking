@@ -4,7 +4,6 @@ import torch
 import torch.nn as nn
 
 from src.scuba_tracking.scuba_tracking.models.common import Conv, DWConv
-from src.scuba_tracking.scuba_tracking.utils.google_utils import attempt_download
 
 
 class CrossConv(nn.Module):
@@ -240,18 +239,13 @@ class End2End(nn.Module):
         x = self.end2end(x)
         return x
 
-
-
-
-
 def attempt_load(weights, map_location=None):
     # Loads an ensemble of models weights=[a,b,c] or a single model weights=[a] or weights=a
     model = Ensemble()
     for w in weights if isinstance(weights, list) else [weights]:
-        attempt_download(w)
         ckpt = torch.load(w, map_location=map_location)  # load
         model.append(ckpt['ema' if ckpt.get('ema') else 'model'].float().fuse().eval())  # FP32 model
-    
+
     # Compatibility updates
     for m in model.modules():
         if type(m) in [nn.Hardswish, nn.LeakyReLU, nn.ReLU, nn.ReLU6, nn.SiLU]:

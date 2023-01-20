@@ -9,14 +9,14 @@ from src.scuba_tracking.scuba_tracking.utils.torch_utils import select_device, t
 from src.scuba_tracking.scuba_tracking.utils.datasets import letterbox
 
 #FIXME
-PATH_TO_WEIGHTS = '/home/khalilv/Documents/sim_ws/src/scuba_tracking/scuba_tracking/weights/simulator_weights.pt'
+PATH_TO_WEIGHTS = '/home/faraz/sim_ws/src/scuba_tracking/weights/simulator_weights.pt'
 
 class YoloV7:
-    def __init__(self, imgsz = 640):
+    def __init__(self, imgsz = 410): #640
         # Initialize
         set_logging()
-        self.device = select_device('cpu')
-        self.half = self.device.type != 'cpu'  # half precision only supported on CUDA
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.half = False #self.device.type != 'cpu'  # half precision only supported on CUDA
         # Load model
         self.model = attempt_load(PATH_TO_WEIGHTS, map_location=self.device)  # load FP32 model
         self.model.eval()
@@ -39,8 +39,8 @@ class YoloV7:
         
         #Other params
         self.augment = False
-        self.conf_threshold = 0.25
-        self.iou_threshold = 0.45
+        self.conf_threshold = 0.1
+        self.iou_threshold = 0.2
         self.agnostic_nms = False
         self.imgsz = imgsz
         self.verbose = False

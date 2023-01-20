@@ -229,7 +229,7 @@ class controller(Node):
         self.obs[-self.RL_controller.num_of_states:] = current_observation
 
         state = torch.tensor(self.obs, dtype=torch.float32, device=self.RL_controller.device).unsqueeze(0)
-
+        
         ############# check the situation to be controllable by RL at low risk of losing the target #############
         if ((0.0 * self.image_size[0] < mean_of_obj_locations[0] < 1 * self.image_size[0]) and
                 (0.0 * self.image_size[1] < mean_of_obj_locations[1] < 1 * self.image_size[1])) and np.random.rand()>0:
@@ -260,9 +260,9 @@ class controller(Node):
 
             self.RL_controller.ERM.push(self.previous_state, self.previous_action, self.obs, yaw_reward, pitch_reward)
             if self.sample_counter % 1000 == 0:
-                np.save(self.RL_controller.path_to_gathered_data + str(self.RL_controller.num_of_experiments), self.RL_controller.ERM.memory)
+                #np.save(self.RL_controller.path_to_gathered_data + str(self.RL_controller.num_of_experiments), self.RL_controller.ERM.memory)
                 print('ERM saved!')
-                np.save(self.RL_controller.path_to_gathered_data + 'scenario#' +str(self.RL_controller.num_of_experiments), self.trajectory)
+                #np.save(self.RL_controller.path_to_gathered_data + 'scenario#' +str(self.RL_controller.num_of_experiments), self.trajectory)
             self.RL_controller.learn()
 
             # the sample counter is used to update a random target for the PID controllers
