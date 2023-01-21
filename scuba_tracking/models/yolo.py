@@ -1,4 +1,3 @@
-import argparse
 import logging
 import sys
 from copy import deepcopy
@@ -9,9 +8,8 @@ import torch
 from src.scuba_tracking.scuba_tracking.models.common import *
 from src.scuba_tracking.scuba_tracking.models.experimental import *
 from src.scuba_tracking.scuba_tracking.utils.autoanchor import check_anchor_order
-from src.scuba_tracking.scuba_tracking.utils.general import make_divisible, check_file, set_logging
-from src.scuba_tracking.scuba_tracking.utils.torch_utils import time_synchronized, fuse_conv_and_bn, model_info, scale_img, initialize_weights, \
-    select_device, copy_attr
+from src.scuba_tracking.scuba_tracking.utils.general import make_divisible
+from src.scuba_tracking.scuba_tracking.utils.torch_utils import time_synchronized, fuse_conv_and_bn, model_info, scale_img, initialize_weights, copy_attr
 from src.scuba_tracking.scuba_tracking.utils.loss import SigmoidBin
 
 try:
@@ -811,33 +809,3 @@ def parse_model(d, ch):  # model_dict, input_channels(3)
             ch = []
         ch.append(c2)
     return nn.Sequential(*layers), sorted(save)
-
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--cfg', type=str, default='yolor-csp-c.yaml', help='model.yaml')
-    parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
-    parser.add_argument('--profile', action='store_true', help='profile model speed')
-    opt = parser.parse_args()
-    opt.cfg = check_file(opt.cfg)  # check file
-    set_logging()
-    device = select_device(opt.device)
-
-    # Create model
-    model = Model(opt.cfg).to(device)
-    model.train()
-    
-    if opt.profile:
-        img = torch.rand(1, 3, 640, 640).to(device)
-        y = model(img, profile=True)
-
-    # Profile
-    # img = torch.rand(8 if torch.cuda.is_available() else 1, 3, 640, 640).to(device)
-    # y = model(img, profile=True)
-
-    # Tensorboard
-    # from torch.utils.tensorboard import SummaryWriter
-    # tb_writer = SummaryWriter()
-    # print("Run 'tensorboard --logdir=models/runs' to view tensorboard at http://localhost:6006/")
-    # tb_writer.add_graph(model.model, img)  # add model to tensorboard
-    # tb_writer.add_image('test', img[0], dataformats='CWH')  # add model to tensorboard

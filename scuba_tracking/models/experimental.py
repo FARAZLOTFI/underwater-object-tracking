@@ -3,7 +3,7 @@ import random
 import torch
 import torch.nn as nn
 
-from src.scuba_tracking.scuba_tracking.models.common import Conv, DWConv
+from src.scuba_tracking.scuba_tracking.models.common import Conv
 
 
 class CrossConv(nn.Module):

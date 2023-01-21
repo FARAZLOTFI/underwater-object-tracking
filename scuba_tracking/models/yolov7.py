@@ -5,18 +5,18 @@ from src.scuba_tracking.scuba_tracking.models.experimental import attempt_load
 from src.scuba_tracking.scuba_tracking.utils.general import check_img_size, non_max_suppression, \
     scale_coords, set_logging
 from src.scuba_tracking.scuba_tracking.utils.plots import plot_one_box
-from src.scuba_tracking.scuba_tracking.utils.torch_utils import select_device, time_synchronized, TracedModel
+from src.scuba_tracking.scuba_tracking.utils.torch_utils import time_synchronized, TracedModel
 from src.scuba_tracking.scuba_tracking.utils.datasets import letterbox
 
 #FIXME
-PATH_TO_WEIGHTS = '/home/faraz/sim_ws/src/scuba_tracking/weights/simulator_weights.pt'
+PATH_TO_WEIGHTS = '/home/khalilv/Documents/sim_ws/src/scuba_tracking/scuba_tracking/weights/simulator_weights.pt'
 
 class YoloV7:
-    def __init__(self, imgsz = 410): #640
+    def __init__(self, imgsz = 416): #640
         # Initialize
         set_logging()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.half = False #self.device.type != 'cpu'  # half precision only supported on CUDA
+        self.half = False # half precision only supported on CUDA
         # Load model
         self.model = attempt_load(PATH_TO_WEIGHTS, map_location=self.device)  # load FP32 model
         self.model.eval()
@@ -52,6 +52,7 @@ class YoloV7:
         img = img[:, :, ::-1].transpose(2, 0, 1)
         img = np.ascontiguousarray(img)
         img = torch.from_numpy(img).to(self.device)
+        
         img = img.half() if self.half else img.float()  # uint8 to fp16/32
         img /= 255.0  # 0 - 255 to 0.0 - 1.0
         if img.ndimension() == 3:
@@ -69,7 +70,6 @@ class YoloV7:
         with torch.no_grad():   # Calculating gradients would cause a GPU memory leak
             pred = self.model(img, augment=self.augment)[0]
         t2 = time_synchronized()
-
         # Apply NMS
         pred = non_max_suppression(pred, self.conf_threshold, self.iou_threshold, classes=None, agnostic=self.agnostic_nms)
         t3 = time_synchronized()
