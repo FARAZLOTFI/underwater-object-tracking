@@ -1,4 +1,5 @@
 NEWER_VERSION = False
+REAL_WORLD = False
 
 if NEWER_VERSION:
     CAMERA_TOPIC = '/fl_cam/aqua_fl_cam/image_raw/compressed'
@@ -11,5 +12,8 @@ else:
 GENERATED_BB_TOPIC = '/aqua/detected_objects'
 COMMAND_TOPIC = '/aqua/command'
 
-YOLO_WEIGHTS = '/home/faraz/sim_ws/src/scuba_tracking/weights/simulator_weights.pt'
+if REAL_WORLD:
+    YOLO_WEIGHTS = './src/weights/vdd_weights.pt'
+else:
+    YOLO_WEIGHTS = './src/weights/simulator_weights.pt'
 
