@@ -338,7 +338,7 @@ class DQN_approach:
         if self.debug_mode:
             summary(self.policy_net, (1, self.obs_dim))
 
-        self.CHECKPOINT_PATH = './RL_checkpoint/training_checkpoint'
+        self.CHECKPOINT_PATH = config.RL_CHECKPOINT
 
         if True:
             checkpoint = torch.load(self.CHECKPOINT_PATH, map_location=self.device)

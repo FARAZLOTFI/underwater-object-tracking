@@ -17,3 +17,4 @@ if REAL_WORLD:
 else:
     YOLO_WEIGHTS = './src/weights/simulator_weights.pt'
 
+RL_CHECKPOINT = './RL_checkpoint/training_checkpoint'
