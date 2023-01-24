@@ -8,8 +8,7 @@ from src.scuba_tracking.scuba_tracking.utils.plots import plot_one_box
 from src.scuba_tracking.scuba_tracking.utils.torch_utils import time_synchronized, TracedModel
 from src.scuba_tracking.scuba_tracking.utils.datasets import letterbox
 
-#FIXME
-PATH_TO_WEIGHTS = '/home/khalilv/Documents/sim_ws/src/scuba_tracking/scuba_tracking/weights/simulator_weights.pt'
+from config import config
 
 class YoloV7:
     def __init__(self, imgsz = 416): #640
@@ -18,7 +17,7 @@ class YoloV7:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.half = False # half precision only supported on CUDA
         # Load model
-        self.model = attempt_load(PATH_TO_WEIGHTS, map_location=self.device)  # load FP32 model
+        self.model = attempt_load(config.YOLO_WEIGHTS, map_location=self.device)  # load FP32 model
         self.model.eval()
         self.stride = int(self.model.stride.max())  # model stride
         imgsz = check_img_size(imgsz, s=self.stride)  # check img_size

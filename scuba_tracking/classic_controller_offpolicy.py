@@ -18,6 +18,8 @@ import random
 ####################################### export PYTHONPATH=/home/USERNAME/sim_ws
 from src.scuba_tracking.scuba_tracking.utils.controller_utils import PID_controller, msg_processing
 
+from config import config
+
 class controller(Node):
 
     def __init__(self):
@@ -55,17 +57,17 @@ class controller(Node):
 
         self.vision_output_subscription = self.create_subscription(
             String,
-            '/aqua/detected_objects',
+            config.GENERATED_BB_TOPIC,
             self.data_handler,
             30)
 
         self.pose_subscription = self.create_subscription(
             Vector3,
-            '/simulator/position_ground_truth',
+            config.ROBOT_POS_TOPIC,
             self.pose_callback,
             30)
 
-        self.command_publisher = self.create_publisher(Command, '/aqua/command', 30)
+        self.command_publisher = self.create_publisher(Command, config.COMMAND_TOPIC, 30)
         # This current_state_publisher is to make sure that we have the pair of (state,action)
         self.current_state_publisher = self.create_publisher(String, '/aqua/current_state', 30)
         # CONTROLLER PART

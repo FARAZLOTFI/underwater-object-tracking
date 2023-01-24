@@ -17,6 +17,8 @@ from ir_msgs.msg import Command
 import os, time
 #######################################
 
+from config import config
+
 class dataset_collector(Node):
 
     def __init__(self):
@@ -27,17 +29,17 @@ class dataset_collector(Node):
 
         self.image_subscription = self.create_subscription(
             CompressedImage,
-            '/simulator/front_left_camera',
+            config.CAMERA_TOPIC,
             self.image_handler,
             30)
 
         self.pose_subscription = self.create_subscription(
             Vector3,
-            '/simulator/position_ground_truth',
+            config.ROBOT_POS_TOPIC,
             self.pose_callback,
             30)
 
-        self.command_publisher = self.create_publisher(Command, '/aqua/command', 30)
+        self.command_publisher = self.create_publisher(Command, config.COMMAND_TOPIC, 30)
 
         self.num_of_samples = 0
         self.path_to_gathered_data = './sampled_images/'
@@ -97,12 +99,12 @@ class dataset_collector(Node):
             self.num_of_samples +=1
             time.sleep(0.3)
 
+        self.command_publisher.publish(self.direct_command)
 
     def pose_callback(self, msg):
         global key_
         x, y, z = msg.x, msg.y, msg.z
 
-        self.command_publisher.publish(self.direct_command)
         #print(x, y, z)
 
 

@@ -13,17 +13,20 @@ from src.scuba_tracking.scuba_tracking.models.yolov7 import YoloV7
 from std_msgs.msg import String
 import os, time
 
+from config import config
+
 class object_tracker(Node):
 
     def __init__(self):
         super().__init__('object_tracker')
         self.detector = YoloV7()
+        print('cam topic: ',config.CAMERA_TOPIC)
         self.image_subscription = self.create_subscription(
             CompressedImage,
-            '/simulator/front_left_camera',
+            config.CAMERA_TOPIC,
             self.image_handler,
             30)
-        self.data_publisher = self.create_publisher(String, '/aqua/detected_objects', 30)
+        self.data_publisher = self.create_publisher(String, config.GENERATED_BB_TOPIC, 30)
         self.msg_ = String()
         self.recording_flag = False
         if self.recording_flag:
