@@ -69,8 +69,6 @@ class dataset_collector(Node):
         elif key_ == 152: # heading right
             self.direct_command.yaw = -0.5
 
-        self.direct_command.pitch = 0.5
-        self.direct_command.yaw = 0.5
         if key_ == 151:  # arrow key ^
             self.direct_command.pitch = -0.5
         elif key_ == 153:  #
