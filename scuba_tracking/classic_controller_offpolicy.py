@@ -18,7 +18,7 @@ import random
 ####################################### export PYTHONPATH=/home/USERNAME/sim_ws
 from src.scuba_tracking.scuba_tracking.utils.controller_utils import PID_controller, msg_processing
 
-from config import config
+from src.scuba_tracking.scuba_tracking.config import config
 
 class controller(Node):
 

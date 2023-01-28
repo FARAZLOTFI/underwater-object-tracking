@@ -79,6 +79,7 @@ class KalmanBoxTracker(object):
         self.centroidarr = []
         CX = (bbox[0]+bbox[2])//2
         CY = (bbox[1]+bbox[3])//2
+        self.conf = bbox[4]
         self.centroidarr.append((CX,CY))
         self.detclass = bbox[5]
         self.bbox_history = [bbox]
@@ -95,6 +96,7 @@ class KalmanBoxTracker(object):
         CY = (bbox[1]+bbox[3])//2
         self.centroidarr.append((CX,CY))
         self.bbox_history.append(bbox)
+        self.conf = bbox[4] #update conf to latest conf (could do some averaging here)
     
     def predict(self):
         #advances the state vector and returns the predicted bounding box estimate
@@ -112,12 +114,12 @@ class KalmanBoxTracker(object):
     def get_state(self):
         #returns the current bounding box estimate
         arr_detclass = np.expand_dims(np.array([self.detclass]), 0)
-        
+        arr_conf = np.expand_dims(np.array([self.conf]), 0)
         arr_u_dot = np.expand_dims(self.kf.x[4],0)
         arr_v_dot = np.expand_dims(self.kf.x[5],0)
         arr_s_dot = np.expand_dims(self.kf.x[6],0)
         
-        return np.concatenate((convert_x_to_bbox(self.kf.x), arr_detclass, arr_u_dot, arr_v_dot, arr_s_dot), axis=1)
+        return np.concatenate((convert_x_to_bbox(self.kf.x), arr_conf, arr_detclass, arr_u_dot, arr_v_dot, arr_s_dot), axis=1)
     
 def associate_detections_to_trackers(detections, trackers, iou_threshold = 0.3):
     

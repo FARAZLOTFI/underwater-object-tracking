@@ -7,9 +7,8 @@ from src.scuba_tracking.scuba_tracking.utils.plots import plot_one_box
 from src.scuba_tracking.scuba_tracking.utils.torch_utils import time_synchronized, TracedModel
 from src.scuba_tracking.scuba_tracking.utils.datasets import letterbox
 from src.scuba_tracking.scuba_tracking.utils.sort import Sort
-from src.scuba_tracking.scuba_tracking.models.yolo import Model
 import random
-from config import config
+from src.scuba_tracking.scuba_tracking.config import config
 
 class YoloV7:
     def __init__(self, imgsz = 416): 
@@ -24,10 +23,10 @@ class YoloV7:
         self.agnostic_nms = False
         self.verbose = False
         self.trace = True        
-        self.no_detect_prob = 0.7 #probability in which detections are lost/thrown away. Set to 0 for 'perfect' detections
+        self.no_detect_prob = 0.0 #probability in which detections are lost/thrown away. Set to 0 for 'perfect' detections
 
         #Tracking params
-        self.track = False
+        self.track = True
         self.sort_max_age = 25
         self.sort_min_hits = 10
 
@@ -67,6 +66,7 @@ class YoloV7:
         img /= 255.0  # 0 - 255 to 0.0 - 1.0
         if img.ndimension() == 3:
             img = img.unsqueeze(0)
+
         # Warmup
         if self.device.type != 'cpu' and (self.old_img_b != img.shape[0] or self.old_img_h != img.shape[2] or self.old_img_w != img.shape[3]):
             self.old_img_b = img.shape[0]
@@ -107,8 +107,11 @@ class YoloV7:
                     # Write results
                     for track in tracked_dets:
                         x1, y1,x2, y2 = track[0:4]
-                        id = track[8]
-                        plot_one_box(track[0:4], img0, label=str(id), color=self.colors[0], line_thickness=1)
+                        conf = track[4]
+                        cls = self.names[int(track[5])]
+                        id = track[9]
+                        label = f'{cls} {conf:.2f} {id}'
+                        plot_one_box(track[0:4], img0, label=label, color=self.colors[0], line_thickness=1)
                         outputs.append([int(x1),int(y1),int(x2),int(y2)])
                         string_output += str(int(x1)) + ',' + str(int(y1)) + ',' + str(int(x2)) + ',' + str(int(y2)) + '#'
                 else:
