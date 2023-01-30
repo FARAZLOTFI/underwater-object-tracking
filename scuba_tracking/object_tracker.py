@@ -38,15 +38,16 @@ class object_tracker(Node):
                 self.num_of_videos = len(os.listdir(self.path_to_recorded_video))
 
             fourcc = cv2.VideoWriter_fourcc(*'XVID')
-            frame_size = (400, 300)
+            frame_size = config.IMAGE_SIZE
             self.out = cv2.VideoWriter('tracking_scenario_'+str(self.num_of_videos)+'.avi', fourcc, 30.0, frame_size)
         cv2.namedWindow("Front view cam", cv2.WINDOW_NORMAL)
-        cv2.resizeWindow("Front view cam", 500, 400)
+        cv2.resizeWindow("Front view cam", config.IMAGE_SIZE[0], config.IMAGE_SIZE[1])
         return
 
     def image_handler(self, msg):
         last_time = time.time()
         img = CvBridge().compressed_imgmsg_to_cv2(msg)
+        img = cv2.resize(img,config.IMAGE_SIZE)
         string_output, outputs, img_ = self.detector.detect(img)
         self.msg_.data = str(len(outputs)) + string_output
         self.data_publisher.publish(self.msg_)
