@@ -51,11 +51,11 @@ class controller(Node):
         self.sample_counter = 0
 
         self.debug = True
-        self.image_size = (400,300)
+        self.image_size = config.IMAGE_SIZE
         self.image_area = self.image_size[0]*self.image_size[1]
         self.single_object_tracking = True
         # let's say it's the indirect distance to the diver
-        self.BB_THRESH = 5500
+        self.BB_THRESH = config.BB_AREA_THRESHOLD
         self.target_x = None
         self.target_y = None
         self.target_area = None
@@ -83,8 +83,8 @@ class controller(Node):
         self.previous_action = []
         self.previous_state = []
 
-        self.RL_actions_list_yaw = np.linspace(-0.3, 0.3, self.RL_controller.num_of_actions, True)
-        self.RL_actions_list_pitch = np.linspace(-0.1, 0.1, self.RL_controller.num_of_actions, True)
+        self.RL_actions_list_yaw = np.linspace(config.MIN_YAW_RATE, config.MAX_YAW_RATE, self.RL_controller.num_of_actions, True)
+        self.RL_actions_list_pitch = np.linspace(config.MIN_PITCH_RATE, config.MAX_PITCH_RATE, self.RL_controller.num_of_actions, True)
         self.reset_recovery_variables()
 
     # We take the last object location to have an estimation of where it should be if was lost
@@ -148,6 +148,8 @@ class controller(Node):
             yaw_reward = -1
             pitch_reward = -1
 
+        #general_reward = 1/(2*abs(current_observation[1])**2 +  2*abs(current_observation[0])**2 + 1)
+        #general_reward, general_reward
         return yaw_reward, pitch_reward
 
     def get_action(self, yaw_rate, pitch_rate,discrete=True):
@@ -166,31 +168,44 @@ class controller(Node):
         #1#102.01816,197.34833,214.18144,264.59863#
         #num_of_objs#obj1_bb#obj2_bb#...#
         mean_of_obj_locations = msg_processing(msg)
-        random_target = False # for exploration
+        PID_random_target = True # for exploration
         # by default let's keep the target at the center
-        if not random_target:
+        if not PID_random_target:
             self.target_x = None
             self.target_y = None
             self.target_area = None
         else:
             # Otherwise, for exploration purposes
-            if self.sample_counter%1000 == 0 :
-                self.target_x = np.random.randint(0.3*self.image_size[0], 0.7*self.image_size[0])
-                self.target_y = np.random.randint(0.4*self.image_size[1], 0.6*self.image_size[1])
-                self.target_area = np.random.randint(0.7*self.BB_THRESH, 0.8*self.BB_THRESH)
+            if self.sample_counter%200 == 0 :
+                self.target_x = np.random.randint(0.2*self.image_size[0], 0.8*self.image_size[0])
+                self.target_y = np.random.randint(0.2*self.image_size[1], 0.8*self.image_size[1])
+                self.target_area = np.random.randint(0.7*self.BB_THRESH, 1.2*self.BB_THRESH)
                 print('Target updated! ',[self.target_x,self.target_y,self.target_area])
 
+        spiral_search_flag = False
         if mean_of_obj_locations[0]>-1:
             if self.single_object_tracking:
                 yaw_ref, pitch_ref, speed_ref = self.controller(mean_of_obj_locations, self.target_x, self.target_y, self.target_area)
-                #print('PID: ', [yaw_ref, pitch_ref])
+                # to have saturated PID controllers as adversarial agents
+                if yaw_ref<0:
+                    yaw_ref = np.maximum(config.MIN_YAW_RATE,yaw_ref)
+                else:
+                    yaw_ref = np.minimum(config.MAX_YAW_RATE,yaw_ref)
+
+                if pitch_ref<0:
+                    pitch_ref = np.maximum(config.MIN_PITCH_RATE,pitch_ref)
+                else:
+                    pitch_ref = np.minimum(config.MAX_PITCH_RATE,pitch_ref)
+
+                print('PID: ', [yaw_ref, pitch_ref])
                 ################## For the recovery part #######################
                 self.reset_recovery_variables(mean_of_obj_locations)
             else:
                 pass #TODO -> TWO scuba divers at the same time
         else:
             # The spiral search strategy
-            yaw_ref, pitch_ref = self.search()
+            yaw_ref, pitch_ref, speed_ref = self.search()
+            print('spiral search: ',[yaw_ref,pitch_ref])
             # in this short part for cases of lost target we use an artifical input for the RL controller
             # this is to make the neural network aware of the target being lost
             if self.rightSideChecked: # it has been lost on the left side
@@ -201,18 +216,19 @@ class controller(Node):
             if self.upSideChecked:  # it has been lost on the left side
                 up_seen = self.image_size[1]
             else:
-                up_seen = 0
+                up_seen = 0.0
 
             #-25 is set based on the noises considered in the following
             mean_of_obj_locations = np.array([right_seen, up_seen, -25.0])
             self.lost_target_step += 1
 
+            spiral_search_flag = True
         ######################### preparing the input for RL ################################
         # Add some noises to improve the NN input
         bb_noise_x = np.random.randint(0, 5)
         bb_noise_y = np.random.randint(0, 5)
         area_noise = bb_noise_x * bb_noise_y  # this I think must be dependent on the two previous ones
-        speed_noise = 0.02 * np.random.rand() # 3
+        speed_noise = 0.01 * np.random.rand() # 3
 
         current_observation = np.array([mean_of_obj_locations[0] + bb_noise_x,
                                         mean_of_obj_locations[1] + bb_noise_y,
@@ -222,25 +238,27 @@ class controller(Node):
         # now normalization
         # TODO no normalization on the  velocities :| lin_vel > 1 ???!
         # 2* is to end up with a value in [-1 , 1]
-
         current_observation[0] = 2*(current_observation[0] - self.image_size[0] / 2) / self.image_size[0]
         current_observation[1] = 2*(current_observation[1] - self.image_size[1] / 2) / self.image_size[1]
         current_observation[2] = 2*(current_observation[2] - self.image_area / 2) / self.image_area
-
         self.obs[:-self.RL_controller.num_of_states] = self.obs[self.RL_controller.num_of_states:]
         self.obs[-self.RL_controller.num_of_states:] = current_observation
 
         state = torch.tensor(self.obs, dtype=torch.float32, device=self.RL_controller.device).unsqueeze(0)
         
         ############# check the situation to be controllable by RL at low risk of losing the target #############
-        if ((0.0 * self.image_size[0] < mean_of_obj_locations[0] < 1 * self.image_size[0]) and
-                (0.0 * self.image_size[1] < mean_of_obj_locations[1] < 1 * self.image_size[1])) and np.random.rand()>0:
+        PID_con_contribution = 0.0# max -> 0.5
+        PID_random_contribution = 0.4 # max -> 1
+        if ((PID_con_contribution * self.image_size[0] < mean_of_obj_locations[0] < (1-PID_con_contribution) * self.image_size[0]) and
+                (PID_con_contribution * self.image_size[1] < mean_of_obj_locations[1] < (1-PID_con_contribution) * self.image_size[1])) \
+                and np.random.rand()>PID_random_contribution:
             NN_output = self.RL_controller.select_action(state)
             yaw_ref = self.RL_actions_list_yaw[NN_output[0].view(-1)[0].cpu().detach().numpy()]  # this we don't use now
             pitch_ref = self.RL_actions_list_pitch[NN_output[1].view(-1)[0].cpu().detach().numpy()]  # this we don't use now
             print('RL: ',[yaw_ref,pitch_ref])
         ########################## apply the control to the robot #############################
-        self.direct_command.yaw = yaw_ref #>0 right 
+        # saturated input control to limit the power of the PID controller
+        self.direct_command.yaw = yaw_ref #>0 right
         self.direct_command.pitch = pitch_ref #>0 down
         self.direct_command.speed = speed_ref
         self.direct_command.roll = 0.0
@@ -253,7 +271,7 @@ class controller(Node):
 
         ####################### online RL part ########################################################
         # if this is the first time then just save the first state
-        if not (len(self.previous_state) == 0):
+        if not (len(self.previous_state) == 0) and not(spiral_search_flag):
             ## reward calculation
             yaw_reward, pitch_reward = self.reward_calculation(current_observation)
             print('rewards: ',yaw_reward,pitch_reward)
@@ -300,21 +318,22 @@ class controller(Node):
                 self.changing_time_up *= 2
                 self.upSideChecked = not self.upSideChecked
 
-        yaw_rate = 0
-        pitch_rate = 0
+        yaw_rate = 0.0
+        pitch_rate = 0.0
+        lin_vel = 0.0
         if self.rightSideChecked:
             # right direction
-            yaw_rate = -0.2
+            yaw_rate = -1.0
         else:
             # left direction
-            yaw_rate = 0.2
+            yaw_rate = 1.0
 
         if self.upSideChecked:
             # go to the down direction
             pitch_rate = 0.1
         else:
             pitch_rate = -0.1
-        return yaw_rate, pitch_rate
+        return yaw_rate, pitch_rate, lin_vel
 
 class DQN_approach:
     def __init__(self):
@@ -322,10 +341,9 @@ class DQN_approach:
         self.reset()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self._init_hyperparameters()
-        self.num_of_actions = 9
-        self.history_buffer_size = 3
+        self.history_buffer_size = 5
         self.num_of_states = 4  # center_x, center_y, area_of_diver_bb, linear_vel
-        self.num_of_actions = 9
+        self.num_of_actions = 5
         self.obs_dim = self.num_of_states * self.history_buffer_size
         self.act_dim = self.num_of_actions
 
@@ -340,14 +358,14 @@ class DQN_approach:
 
         self.CHECKPOINT_PATH = config.RL_CHECKPOINT
 
-        if True:
+        try:
             checkpoint = torch.load(self.CHECKPOINT_PATH, map_location=self.device)
             self.policy_net.load_state_dict(checkpoint['model_state_dict_policy'], strict=True)
             self.target_net.load_state_dict(checkpoint['model_state_dict_target'], strict=True)
             self.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             self.starting_episode = checkpoint['TRAINING_STEP']
             print('Weights loaded!')
-        else:
+        except:
             print('No checkpoint found!')
             self.starting_episode = 0
 
@@ -369,18 +387,18 @@ class DQN_approach:
         # EPS_DECAY controls the rate of exponential decay of epsilon, higher means a slower decay
         # TAU is the update rate of the target network
         # LR is the learning rate of the AdamW optimizer
-        self.BATCH_SIZE = 50
+        self.BATCH_SIZE = 10
         self.GAMMA = 0.5
         self.EPS_START = 0.9
         self.EPS_END = 0.05
         self.EPS_DECAY = 1000
-        self.TAU = 0.005
-        self.LR = 2e-5
+        self.TAU = 0.001
+        self.LR = 1e-5
         self.ACTION_SCALER = 2
         self.num_episodes = 50000
 
     def reset(self):
-        self.ERM = ReplayMemory(2000)
+        self.ERM = ReplayMemory(500)
         self.steps_done = 0
 
     def select_action(self,state):
@@ -388,7 +406,7 @@ class DQN_approach:
         sample = random.random()
         eps_threshold = self.EPS_END + (self.EPS_START - self.EPS_END) * \
                         math.exp(-1. * self.steps_done / self.EPS_DECAY)
-        if np.random.rand()>0.9:#sample > eps_threshold:
+        if np.random.rand()>0.05:#sample > eps_threshold:
             with torch.no_grad():
                 # t.max(1) will return largest column value of each row.
                 # second column on max result is index of where max element was

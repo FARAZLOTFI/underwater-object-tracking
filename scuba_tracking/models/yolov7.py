@@ -8,10 +8,10 @@ from src.scuba_tracking.scuba_tracking.utils.plots import plot_one_box
 from src.scuba_tracking.scuba_tracking.utils.torch_utils import time_synchronized, TracedModel
 from src.scuba_tracking.scuba_tracking.utils.datasets import letterbox
 
-from config import config
+from src.scuba_tracking.scuba_tracking.config import config
 
 class YoloV7:
-    def __init__(self, imgsz = 416): #640
+    def __init__(self, imgsz = config.IMAGE_SIZE[0]): #640
         # Initialize
         set_logging()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -38,8 +38,8 @@ class YoloV7:
         
         #Other params
         self.augment = False
-        self.conf_threshold = 0.1
-        self.iou_threshold = 0.2
+        self.conf_threshold = 0.3
+        self.iou_threshold = 0.3
         self.agnostic_nms = False
         self.imgsz = imgsz
         self.verbose = False

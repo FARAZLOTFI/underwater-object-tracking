@@ -1,4 +1,4 @@
-NEWER_VERSION = False
+NEWER_VERSION = True
 REAL_WORLD = False
 
 if NEWER_VERSION:
@@ -18,3 +18,9 @@ else:
     YOLO_WEIGHTS = './src/weights/simulator_weights.pt'
 
 RL_CHECKPOINT = './RL_checkpoint/training_checkpoint'
+IMAGE_SIZE = (410, 410)
+BB_AREA_THRESHOLD = 20000
+MIN_YAW_RATE = -0.5
+MAX_YAW_RATE = 0.5
+MIN_PITCH_RATE = -0.05
+MAX_PITCH_RATE = 0.05

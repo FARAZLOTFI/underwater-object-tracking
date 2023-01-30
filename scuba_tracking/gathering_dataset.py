@@ -64,26 +64,25 @@ class dataset_collector(Node):
 
         cv2.imshow("Front view cam", subscribed_image)
         key_ = cv2.waitKey(1)
-        if key_ == 150: # heading left
-            self.direct_command.yaw = 0.5
-        elif key_ == 152: # heading right
-            self.direct_command.yaw = -0.5
+        print('key: ', key_)
+        if key_ == 152: # heading left
+            self.direct_command.yaw = 1.0
+        elif key_ == 150: # heading right
+            self.direct_command.yaw = -1.0
 
-        self.direct_command.pitch = 0.5
-        self.direct_command.yaw = 0.5
         if key_ == 151:  # arrow key ^
-            self.direct_command.pitch = -0.5
+            self.direct_command.pitch = -0.2
         elif key_ == 153:  #
-            self.direct_command.pitch = 0.5
+            self.direct_command.pitch = 0.2
 
         if key_ == ord('w'):  # go forward
             self.direct_command.speed = 0.5
         elif key_ == ord('s'): # go backward
             self.direct_command.speed = -0.5
 
-        if key_ == ord('a'):  # go forward
+        if key_ == ord('a'):  # rolling
             self.direct_command.roll = -0.5
-        elif key_ == ord('d'): # go backward
+        elif key_ == ord('d'): # rolling
             self.direct_command.roll = 0.5
 
         if key_ == 82:  # arrow key ^

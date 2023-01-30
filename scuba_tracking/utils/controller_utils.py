@@ -1,5 +1,6 @@
 import os, time
 import numpy as np
+from src.scuba_tracking.scuba_tracking.config import config
 #######################################
 
 class PID_controller:
@@ -12,10 +13,10 @@ class PID_controller:
         self.y_controller_gains = [0.13,2,0]
         self.single_object_tracking = single_object_tracking
         #self.reference_values = reference_values
-        self.image_size = (400,300)
+        self.image_size = config.IMAGE_SIZE
 
         # let's say it's the indirect distance to the diver
-        self.BB_THRESH = 4500
+        self.BB_THRESH = config.BB_AREA_THRESHOLD
 
 
     def __call__(self,current_observation, x = None, y = None, area = None):
