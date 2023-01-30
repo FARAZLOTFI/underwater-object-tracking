@@ -6,14 +6,6 @@ from src.scuba_tracking.scuba_tracking.utils.general import check_img_size, non_
 from src.scuba_tracking.scuba_tracking.utils.plots import plot_one_box
 from src.scuba_tracking.scuba_tracking.utils.torch_utils import time_synchronized, TracedModel
 from src.scuba_tracking.scuba_tracking.utils.datasets import letterbox
-<<<<<<< HEAD
-
-from src.scuba_tracking.scuba_tracking.config import config
-
-class YoloV7:
-    def __init__(self, imgsz = config.IMAGE_SIZE[0]): #640
-        # Initialize
-=======
 from src.scuba_tracking.scuba_tracking.utils.sort import Sort
 import random
 from src.scuba_tracking.scuba_tracking.config import config
@@ -22,7 +14,6 @@ class YoloV7:
     def __init__(self, imgsz = 416): 
 
         # Initialize parameters
->>>>>>> 4f62d954fe90338cbf6d4f83888b7118e07c2342
         set_logging()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.half = False # half precision only supported on CUDA
@@ -58,20 +49,10 @@ class YoloV7:
         self.old_img_w = self.old_img_h = imgsz
         self.old_img_b = 1
         
-<<<<<<< HEAD
-        #Other params
-        self.augment = False
-        self.conf_threshold = 0.3
-        self.iou_threshold = 0.3
-        self.agnostic_nms = False
-        self.imgsz = imgsz
-        self.verbose = False
-=======
         #Initialize tracker
         self.sort_tracker = Sort(max_age=self.sort_max_age,
                         min_hits=self.sort_min_hits,
                         iou_threshold=self.iou_threshold)
->>>>>>> 4f62d954fe90338cbf6d4f83888b7118e07c2342
         return
 
     def detect(self, img):
