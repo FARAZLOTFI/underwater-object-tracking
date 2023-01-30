@@ -2,7 +2,7 @@ import numpy as np
 import random
 import torch
 import torch.nn as nn
-
+import sys
 from src.scuba_tracking.scuba_tracking.models.common import Conv
 
 
@@ -242,6 +242,7 @@ class End2End(nn.Module):
 def attempt_load(weights, map_location=None):
     # Loads an ensemble of models weights=[a,b,c] or a single model weights=[a] or weights=a
     model = Ensemble()
+    sys.path.insert(0, "./src/scuba_tracking/scuba_tracking")
     for w in weights if isinstance(weights, list) else [weights]:
         ckpt = torch.load(w, map_location=map_location)  # load
         model.append(ckpt['ema' if ckpt.get('ema') else 'model'].float().fuse().eval())  # FP32 model

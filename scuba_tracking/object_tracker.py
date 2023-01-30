@@ -13,7 +13,7 @@ from src.scuba_tracking.scuba_tracking.models.yolov7 import YoloV7
 from std_msgs.msg import String
 import os, time
 
-from config import config
+from src.scuba_tracking.scuba_tracking.config import config
 
 class object_tracker(Node):
 
