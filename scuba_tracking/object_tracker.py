@@ -37,6 +37,7 @@ class object_tracker(Node):
     def image_handler(self, msg):
         global img, string_command, flag_updated_frame
         img = CvBridge().compressed_imgmsg_to_cv2(msg)
+        img = cv2.resize(img,config.IMAGE_SIZE)
         self.msg_.data = string_command
         self.data_publisher.publish(self.msg_)
         flag_updated_frame = True
@@ -89,7 +90,7 @@ def main(args=None):
     object_detector_thread.start()
     print('Vision node initiated!')
     #################################################
-    image_processing()
+    image_processing(False)
 
 if __name__ == '__main__':
     main()
