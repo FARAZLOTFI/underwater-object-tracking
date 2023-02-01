@@ -11,7 +11,7 @@ import random
 from src.scuba_tracking.scuba_tracking.config import config
 
 class YoloV7:
-    def __init__(self, imgsz = 416): 
+    def __init__(self, imgsz = config.IMAGE_SIZE[0]):
 
         # Initialize parameters
         set_logging()
