@@ -205,7 +205,7 @@ class Sort(object):
         
         i = len(self.trackers)
 
-        for j, trk in reversed(list(enumerate(self.trackers))):
+        for trk in reversed(self.trackers):
             d = trk.get_state()[0]
             #if time since last detection < self.max_age and if number of detections is >= self.min_hits 
             if ((trk.time_since_update < self.max_age) and (trk.hits >= self.min_hits)):

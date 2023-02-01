@@ -11,7 +11,7 @@ import random
 from src.scuba_tracking.scuba_tracking.config import config
 
 class YoloV7:
-    def __init__(self, imgsz = 416): 
+    def __init__(self, imgsz = config.IMAGE_SIZE[0]):
 
         # Initialize parameters
         set_logging()
@@ -124,6 +124,20 @@ class YoloV7:
                                 plot_one_box(xyxy, img0, label=label, color=self.colors[int(cls)], line_thickness=1)
                                 outputs.append([int(x1),int(y1),int(x2),int(y2)])
                                 string_output += str(int(x1)) + ',' + str(int(y1)) + ',' + str(int(x2)) + ',' + str(int(y2)) + '#'
+            elif self.track:
+                #no detections but we still want to update trackers
+                dets_to_sort = np.empty((0,6))
+                tracked_dets = self.sort_tracker.update(dets_to_sort)
+                # Write results
+                for track in tracked_dets:
+                    x1, y1,x2, y2 = track[0:4]
+                    conf = track[4]
+                    cls = self.names[int(track[5])]
+                    id = track[9]
+                    label = f'{cls} {conf:.2f} {id}'
+                    plot_one_box(track[0:4], img0, label=label, color=self.colors[0], line_thickness=1)
+                    outputs.append([int(x1),int(y1),int(x2),int(y2)])
+                    string_output += str(int(x1)) + ',' + str(int(y1)) + ',' + str(int(x2)) + ',' + str(int(y2)) + '#'
 
             if self.verbose:
                 # Print time (inference + NMS)

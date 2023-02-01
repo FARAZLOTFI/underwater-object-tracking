@@ -18,9 +18,15 @@ else:
     YOLO_WEIGHTS = './src/weights/simulator_weights.pt'
 
 RL_CHECKPOINT = './RL_checkpoint/training_checkpoint'
-IMAGE_SIZE = (410, 410)
+IMAGE_SIZE = (416, 416)
 BB_AREA_THRESHOLD = 20000
+
+PID_RANDOM_TARGET_MODE = True
+SATURATED_PID = True
+
 MIN_YAW_RATE = -0.5
 MAX_YAW_RATE = 0.5
 MIN_PITCH_RATE = -0.05
 MAX_PITCH_RATE = 0.05
+
+

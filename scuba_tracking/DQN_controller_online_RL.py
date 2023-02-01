@@ -168,9 +168,8 @@ class controller(Node):
         #1#102.01816,197.34833,214.18144,264.59863#
         #num_of_objs#obj1_bb#obj2_bb#...#
         mean_of_obj_locations = msg_processing(msg)
-        PID_random_target = True # for exploration
-        # by default let's keep the target at the center
-        if not PID_random_target:
+        # the default mode is to keep the target at the center point
+        if not config.PID_RANDOM_TARGET_MODE:
             self.target_x = None
             self.target_y = None
             self.target_area = None
@@ -187,15 +186,16 @@ class controller(Node):
             if self.single_object_tracking:
                 yaw_ref, pitch_ref, speed_ref = self.controller(mean_of_obj_locations, self.target_x, self.target_y, self.target_area)
                 # to have saturated PID controllers as adversarial agents
-                if yaw_ref<0:
-                    yaw_ref = np.maximum(config.MIN_YAW_RATE,yaw_ref)
-                else:
-                    yaw_ref = np.minimum(config.MAX_YAW_RATE,yaw_ref)
+                if config.SATURATED_PID:
+                    if yaw_ref<0:
+                        yaw_ref = np.maximum(config.MIN_YAW_RATE,yaw_ref)
+                    else:
+                        yaw_ref = np.minimum(config.MAX_YAW_RATE,yaw_ref)
 
-                if pitch_ref<0:
-                    pitch_ref = np.maximum(config.MIN_PITCH_RATE,pitch_ref)
-                else:
-                    pitch_ref = np.minimum(config.MAX_PITCH_RATE,pitch_ref)
+                    if pitch_ref<0:
+                        pitch_ref = np.maximum(config.MIN_PITCH_RATE,pitch_ref)
+                    else:
+                        pitch_ref = np.minimum(config.MAX_PITCH_RATE,pitch_ref)
 
                 print('PID: ', [yaw_ref, pitch_ref])
                 ################## For the recovery part #######################
@@ -261,7 +261,7 @@ class controller(Node):
         self.direct_command.yaw = yaw_ref #>0 right
         self.direct_command.pitch = pitch_ref #>0 down
         self.direct_command.speed = speed_ref
-        self.direct_command.roll = 0.0
+        self.direct_command.roll = 0.1
         if self.debug:
             print('speed ref: ', speed_ref)
             pass
@@ -394,8 +394,6 @@ class DQN_approach:
         self.EPS_DECAY = 1000
         self.TAU = 0.001
         self.LR = 1e-5
-        self.ACTION_SCALER = 2
-        self.num_episodes = 50000
 
     def reset(self):
         self.ERM = ReplayMemory(500)
