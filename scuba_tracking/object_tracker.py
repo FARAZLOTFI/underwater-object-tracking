@@ -15,34 +15,21 @@ import os, time, threading
 
 from src.scuba_tracking.scuba_tracking.config import config
 
-from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
-
 flag_updated_frame = False # this flag is used to be sure that the detector does not process the same image
 string_command = ''
 img = None
-last_time = 0
-
 class object_tracker(Node):
 
     def __init__(self):
         super().__init__('object_tracker')
-
-        self.debug_image_subscription = False
-
-        qos_profile = QoSProfile(
-            reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT,
-            history=QoSHistoryPolicy.RMW_QOS_POLICY_HISTORY_KEEP_LAST,
-            depth=1
-        )
 
         print('cam topic: ',config.CAMERA_TOPIC)
         self.image_subscription = self.create_subscription(
             CompressedImage,
             config.CAMERA_TOPIC,
             self.image_handler,
-            qos_profile)
-
-        self.data_publisher = self.create_publisher(String, config.GENERATED_BB_TOPIC, 10)
+            30)
+        self.data_publisher = self.create_publisher(String, config.GENERATED_BB_TOPIC, 30)
         self.msg_ = String()
         self.recording_flag = False
         if self.recording_flag:
@@ -66,23 +53,16 @@ class object_tracker(Node):
         self.msg_.data = string_command
         self.data_publisher.publish(self.msg_)
         if self.recording_flag:
-            self.out.write(img)
-
-        if self.debug_image_subscription:
-            cv2.imshow("Raw images", img)
-            key_ = cv2.waitKey(1)
+            self.out.write(img_)
 
         flag_updated_frame = True
-        print(time.time())
-
 
 def image_processing():
-    global img, string_command, flag_updated_frame, last_time
+    global img, string_command, flag_updated_frame
     # initiating the detector in a distinct thread
     detector = YoloV7()
     cv2.namedWindow("Processed frames", cv2.WINDOW_NORMAL)
     cv2.resizeWindow("Processed frames", config.IMAGE_SIZE[0], config.IMAGE_SIZE[1])
-    last_time = time.time()
     while(1):
         if img is None or not(flag_updated_frame):
             continue
@@ -90,7 +70,7 @@ def image_processing():
             last_time = time.time()
             string_output, outputs, img_ = detector.detect(img)
             string_command = str(len(outputs)) + string_output
-            #print(time.time() - last_time)
+            print(time.time() - last_time)
             cv2.imshow("Processed frames", img_)
             key_ = cv2.waitKey(1)
             if key_ == ord('q'):  # quit
@@ -98,8 +78,9 @@ def image_processing():
 
             flag_updated_frame = False
 
+
+
 def ros_node():
-    global object_tracker_
     rclpy.init()
 
     object_tracker_ = object_tracker()
@@ -114,7 +95,6 @@ def main(args=None):
     object_detector_thread.start()
     print('Vision node initiated!')
     #################################################
-    #time.sleep(4)
     image_processing()
 
 if __name__ == '__main__':
