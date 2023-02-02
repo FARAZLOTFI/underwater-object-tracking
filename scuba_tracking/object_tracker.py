@@ -14,6 +14,8 @@ from std_msgs.msg import String
 import os, time, threading
 
 from src.scuba_tracking.scuba_tracking.config import config
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
+
 
 flag_updated_frame = False # this flag is used to be sure that the detector does not process the same image
 string_command = ''
@@ -24,12 +26,17 @@ class object_tracker(Node):
         super().__init__('object_tracker')
 
         print('cam topic: ',config.CAMERA_TOPIC)
+        qos_profile = QoSProfile(
+            reliability=QoSReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT,
+            history=QoSHistoryPolicy.RMW_QOS_POLICY_HISTORY_KEEP_LAST,
+            depth=1
+        )
         self.image_subscription = self.create_subscription(
             CompressedImage,
             config.CAMERA_TOPIC,
             self.image_handler,
-            30)
-        self.data_publisher = self.create_publisher(String, config.GENERATED_BB_TOPIC, 30)
+            qos_profile=qos_profile)
+        self.data_publisher = self.create_publisher(String, config.GENERATED_BB_TOPIC, 10)
         self.msg_ = String()
         self.recording_flag = False
         if self.recording_flag:

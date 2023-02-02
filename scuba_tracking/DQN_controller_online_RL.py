@@ -72,9 +72,9 @@ class controller(Node):
             self.pose_callback,
             30)
 
-        self.command_publisher = self.create_publisher(Command, config.COMMAND_TOPIC, 30)
+        self.command_publisher = self.create_publisher(Command, config.COMMAND_TOPIC, 10)
         # This current_state_publisher is to make sure that we have the pair of (state,action)
-        self.current_state_publisher = self.create_publisher(String, '/aqua/current_state', 30)
+        self.current_state_publisher = self.create_publisher(String, '/aqua/current_state', 10)
         # CONTROLLER PART
         self.controller = PID_controller()
         # RL Controller
