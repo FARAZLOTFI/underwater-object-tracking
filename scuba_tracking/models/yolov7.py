@@ -18,8 +18,8 @@ class YoloV7:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.half = False # half precision only supported on CUDA
         self.augment = False
-        self.conf_threshold = 0.1
-        self.iou_threshold = 0.2
+        self.conf_threshold = 0.5
+        self.iou_threshold = 0.3
         self.agnostic_nms = False
         self.verbose = False
         self.trace = True        
@@ -27,8 +27,8 @@ class YoloV7:
 
         #Tracking params
         self.track = True
-        self.sort_max_age = 25
-        self.sort_min_hits = 10
+        self.sort_max_age = 10
+        self.sort_min_hits = 30
 
         # Load model
         self.model = attempt_load(config.YOLO_WEIGHTS, map_location=self.device)  # load FP32 model

@@ -47,10 +47,10 @@ class controller(Node):
         self.sample_counter = 0
 
         self.debug = True
-        self.image_size = (400,300)
+        self.image_size = config.IMAGE_SIZE
         self.single_object_tracking = True
         # let's say it's the indirect distance to the diver
-        self.BB_THRESH = 4800
+        self.BB_THRESH = config.BB_AREA_THRESHOLD
         self.target_x = None
         self.target_y = None
         self.target_area = None
@@ -59,13 +59,13 @@ class controller(Node):
             String,
             config.GENERATED_BB_TOPIC,
             self.data_handler,
-            30)
+            10)
 
         self.pose_subscription = self.create_subscription(
             Vector3,
             config.ROBOT_POS_TOPIC,
             self.pose_callback,
-            30)
+            10)
 
         self.command_publisher = self.create_publisher(Command, config.COMMAND_TOPIC, 30)
         # This current_state_publisher is to make sure that we have the pair of (state,action)
@@ -105,7 +105,7 @@ class controller(Node):
         #1#102.01816,197.34833,214.18144,264.59863#
         #num_of_objs#obj1_bb#obj2_bb#...#
         mean_of_obj_locations = msg_processing(msg)
-        random_target = True # for exploration
+        random_target = config.PID_RANDOM_TARGET_MODE # for exploration
         # by default let's keep the target at the center
         if not random_target:
             self.target_x = None
@@ -166,9 +166,9 @@ class controller(Node):
 
             self.sample_counter += 1
 
-        self.direct_command.yaw = yaw_ref
+        self.direct_command.yaw = 0.0#yaw_ref
         self.direct_command.pitch = pitch_ref
-        self.direct_command.speed = speed_ref
+        self.direct_command.speed = 0.0#speed_ref
         self.direct_command.roll = 0.0
         if self.debug:
             print('speed ref: ', speed_ref)
