@@ -168,6 +168,7 @@ class controller(Node):
         #1#102.01816,197.34833,214.18144,264.59863#
         #num_of_objs#obj1_bb#obj2_bb#...#
         mean_of_obj_locations = msg_processing(msg)
+        ######################################################
         SAFETY_MECHANISM = False
         ############### SAFETY MECHANISM ######################
         if (mean_of_obj_locations[2] - config.BB_AREA_MAX) > 0:
