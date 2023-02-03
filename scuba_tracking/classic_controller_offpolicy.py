@@ -105,6 +105,7 @@ class controller(Node):
         #1#102.01816,197.34833,214.18144,264.59863#
         #num_of_objs#obj1_bb#obj2_bb#...#
         mean_of_obj_locations = msg_processing(msg)
+        print('obj: ',mean_of_obj_locations)
         random_target = config.PID_RANDOM_TARGET_MODE # for exploration
         # by default let's keep the target at the center
         if not random_target:
@@ -166,9 +167,9 @@ class controller(Node):
 
             self.sample_counter += 1
 
-        self.direct_command.yaw = 0.0#yaw_ref
+        self.direct_command.yaw = yaw_ref
         self.direct_command.pitch = pitch_ref
-        self.direct_command.speed = 0.0#speed_ref
+        self.direct_command.speed = speed_ref
         self.direct_command.roll = 0.0
         if self.debug:
             print('speed ref: ', speed_ref)

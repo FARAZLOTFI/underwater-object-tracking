@@ -168,6 +168,10 @@ class controller(Node):
         #1#102.01816,197.34833,214.18144,264.59863#
         #num_of_objs#obj1_bb#obj2_bb#...#
         mean_of_obj_locations = msg_processing(msg)
+        SAFETY_MECHANISM = False
+        ############### SAFETY MECHANISM ######################
+        if (mean_of_obj_locations[2] - config.BB_AREA_MAX) > 0:
+            SAFETY_MECHANISM = True
         # the default mode is to keep the target at the center point
         if not config.PID_RANDOM_TARGET_MODE:
             self.target_x = None
@@ -218,7 +222,7 @@ class controller(Node):
             else:
                 up_seen = 0.0
 
-            #-25 is set based on the noises considered in the following
+            #-25 is set based oSAFETY_MECHANISMn the noises considered in the following
             mean_of_obj_locations = np.array([right_seen, up_seen, -25.0])
             self.lost_target_step += 1
 
@@ -248,7 +252,7 @@ class controller(Node):
         
         ############# check the situation to be controllable by RL at low risk of losing the target #############
         PID_con_contribution = 0.0# max -> 0.5
-        PID_random_contribution = 0.4 # max -> 1
+        PID_random_contribution = 0.0 # max -> 1
         if ((PID_con_contribution * self.image_size[0] < mean_of_obj_locations[0] < (1-PID_con_contribution) * self.image_size[0]) and
                 (PID_con_contribution * self.image_size[1] < mean_of_obj_locations[1] < (1-PID_con_contribution) * self.image_size[1])) \
                 and np.random.rand()>PID_random_contribution:
@@ -261,18 +265,27 @@ class controller(Node):
         self.direct_command.yaw = yaw_ref #>0 right
         self.direct_command.pitch = pitch_ref #>0 down
         self.direct_command.speed = speed_ref
-        self.direct_command.roll = 0.1
+        self.direct_command.roll = 0.0 * (np.random.rand() - 1)
         if self.debug:
             print('speed ref: ', speed_ref)
             pass
+
+        ####################################### SAFETY MECHANISM ###########################
+        if SAFETY_MECHANISM:
+            self.direct_command.yaw = 0.0
+            self.direct_command.pitch = 0.0
+            self.direct_command.speed = 0.0
+            self.direct_command.roll = 0.0
+        ####################################################################################
 
         self.command_publisher.publish(self.direct_command)
         self.current_state_publisher.publish(msg)
 
         ####################### online RL part ########################################################
         # if this is the first time then just save the first state
-        if not (len(self.previous_state) == 0) and not(spiral_search_flag):
+        if not (len(self.previous_state) == 0) and not(spiral_search_flag) and not(SAFETY_MECHANISM):
             ## reward calculation
+
             yaw_reward, pitch_reward = self.reward_calculation(current_observation)
             print('rewards: ',yaw_reward,pitch_reward)
             # Store the transition in memory self.previous_state, self.previous_action, state, reward
@@ -387,7 +400,7 @@ class DQN_approach:
         # EPS_DECAY controls the rate of exponential decay of epsilon, higher means a slower decay
         # TAU is the update rate of the target network
         # LR is the learning rate of the AdamW optimizer
-        self.BATCH_SIZE = 10
+        self.BATCH_SIZE = 50
         self.GAMMA = 0.5
         self.EPS_START = 0.9
         self.EPS_END = 0.05
@@ -396,7 +409,7 @@ class DQN_approach:
         self.LR = 1e-5
 
     def reset(self):
-        self.ERM = ReplayMemory(500)
+        self.ERM = ReplayMemory(2000)
         self.steps_done = 0
 
     def select_action(self,state):

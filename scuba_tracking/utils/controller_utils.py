@@ -17,7 +17,8 @@ class PID_controller:
 
         # let's say it's the indirect distance to the diver
         self.BB_THRESH = config.BB_AREA_THRESHOLD
-
+        # This is critical for the safety mechanism
+        self.BB_MAX = config.BB_AREA_MAX
 
     def __call__(self,current_observation, x = None, y = None, area = None):
         self.output_update(current_observation, x, y, area)
@@ -46,7 +47,7 @@ class PID_controller:
         self.previous_x_P = x_P
         self.x_controller_output = self.generate_controller_output(self.x_controller_gains, [x_P, x_D, x_I])
 
-        # Depth
+        # Depth'debug
         if target_y is None:
             target_y = 0.5 * self.image_size[1]
 
@@ -56,6 +57,12 @@ class PID_controller:
         self.previous_y_P = y_P
         self.y_controller_output = self.generate_controller_output(self.y_controller_gains, [y_P, y_D, y_I])
 
+        # SAFETY MECHANISM # @@@
+        if (current_observation[2] - self.BB_MAX)>0:
+            self.x_controller_output = 0.0
+            self.y_controller_output = 0.0
+            self.area_controller_output = 0.0
+        ########################
         print('controller setpoints: ',target_x, target_y, area_target)
     def generate_controller_output(self, gains, errors):
         kp, ki, kd = gains
