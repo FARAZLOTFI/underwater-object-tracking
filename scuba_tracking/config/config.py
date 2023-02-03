@@ -1,5 +1,5 @@
 NEWER_VERSION = True
-REAL_WORLD = True
+REAL_WORLD = False
 
 if NEWER_VERSION:
     CAMERA_TOPIC = '/fl_cam/aqua_fl_cam/image_raw/compressed'
@@ -19,10 +19,11 @@ else:
 
 RL_CHECKPOINT = './RL_checkpoint/training_checkpoint'
 IMAGE_SIZE = (416, 416)
-BB_AREA_THRESHOLD = 20000
+BB_AREA_THRESHOLD = (IMAGE_SIZE[0]/3)*(IMAGE_SIZE[1]/3)
+BB_AREA_MAX = (IMAGE_SIZE[0]/2.9)*(IMAGE_SIZE[1]/2.9) # SAFETY DISTANCE!!
 
 PID_RANDOM_TARGET_MODE = False
-SATURATED_PID = False
+SATURATED_PID = True
 
 MIN_YAW_RATE = -0.5
 MAX_YAW_RATE = 0.5
