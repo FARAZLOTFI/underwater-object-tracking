@@ -45,7 +45,7 @@ class object_tracker(Node):
                 self.num_of_videos = len(os.listdir(self.path_to_recorded_video))
 
             fourcc = cv2.VideoWriter_fourcc(*'XVID')
-            frame_size = config.IMAGE_SIZE
+            self.frame_size = config.IMAGE_SIZE
             self.out = cv2.VideoWriter('tracking_scenario_'+str(self.num_of_videos)+'.avi', fourcc, 30.0, frame_size)
 
         self.detector = YoloV7()
@@ -57,20 +57,16 @@ class object_tracker(Node):
     def image_handler(self, msg):
         img = CvBridge().compressed_imgmsg_to_cv2(msg)
         last_time = time.time()
-        img = cv2.resize(img, config.IMAGE_SIZE)
         string_output, outputs, img_ = self.detector.detect(img)
         string_command = str(len(outputs)) + string_output
         print(time.time() - last_time)
         cv2.imshow("Processed frames", img_)
         key_ = cv2.waitKey(1)
-
         self.msg_.data = string_command
         self.data_publisher.publish(self.msg_)
         if self.recording_flag:
-            self.out.write(img_)
-
-
-
+            save_img_ = cv2.resize(img_, self.frame_size)
+            self.out.write(save_img_)
 
 def main(args=None):
     rclpy.init()
