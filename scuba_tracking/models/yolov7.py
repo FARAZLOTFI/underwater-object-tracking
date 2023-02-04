@@ -18,11 +18,11 @@ class YoloV7:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.half = False # half precision only supported on CUDA
         self.augment = False
-        self.conf_threshold = 0.5
+        self.conf_threshold = 0.1
         self.iou_threshold = 0.2
         self.verbose = False
         self.trace = True        
-        self.no_detect_prob = 0.3 #probability in which detections are lost/thrown away. Set to 0 for 'perfect' detections
+        self.no_detect_prob = 0.0 #probability in which detections are lost/thrown away. Set to 0 for 'perfect' detections
 
         #Tracking params
         self.track = True
@@ -104,9 +104,7 @@ class YoloV7:
                 dets_to_sort = np.empty((0,6))
 
             if self.track:
-                print("BEFORE", dets_to_sort)
                 tracked_dets = self.sort_tracker.update(dets_to_sort)
-                print("AFTER", tracked_dets)
                 # Write results
                 for track in tracked_dets:
                     x1, y1,x2, y2 = track[0:4]
