@@ -6,7 +6,7 @@ from src.scuba_tracking.scuba_tracking.utils.general import check_img_size, non_
 from src.scuba_tracking.scuba_tracking.utils.plots import plot_one_box
 from src.scuba_tracking.scuba_tracking.utils.torch_utils import time_synchronized, TracedModel
 from src.scuba_tracking.scuba_tracking.utils.datasets import letterbox
-from src.scuba_tracking.scuba_tracking.utils.sort import Sort
+from src.scuba_tracking.scuba_tracking.utils.sort import Sort, iou_batch
 import random
 from src.scuba_tracking.scuba_tracking.config import config
 
@@ -22,12 +22,14 @@ class YoloV7:
         self.iou_threshold = 0.2
         self.verbose = False
         self.trace = True        
-        self.no_detect_prob = 0.0 #probability in which detections are lost/thrown away. Set to 0 for 'perfect' detections
+        self.no_detect_prob = 0.2 #probability in which detections are lost/thrown away. Set to 0 for 'perfect' detections
 
         #Tracking params
         self.track = True
         self.sort_max_age = 5
         self.sort_min_hits = 10
+        self.track_id = None
+        self.last_tracked_bb = None
 
         # Load model
         self.model = attempt_load(config.YOLO_WEIGHTS, map_location=self.device)  # load FP32 model
@@ -105,16 +107,34 @@ class YoloV7:
 
             if self.track:
                 tracked_dets = self.sort_tracker.update(dets_to_sort)
-                # Write results
-                for track in tracked_dets:
-                    x1, y1,x2, y2 = track[0:4]
+                
+                if len(tracked_dets): #if at least one object is being tracked
+
+                    if self.track_id is None: 
+                        if self.last_tracked_bb is None: 
+                            track = tracked_dets[np.argmax(tracked_dets[:,4]), :] #initialize track to bb with highest confidence
+                        else: 
+                            track = tracked_dets[np.argmax(iou_batch(tracked_dets, self.last_tracked_bb))] #set track to closest in iou to previously tracked bb
+                    else: 
+                        track = tracked_dets[np.where(tracked_dets[:,-1] == self.track_id)] #set track by id 
+                        if len(track): #id was found
+                            track = track[0]
+                        else: #id not found - reset and continue
+                            self.track_id = None
+                            continue
+                    
+                    self.last_tracked_bb = track[0:4]
+                    self.track_id = track[-1]
+                    x1, y1,x2, y2 = self.last_tracked_bb
                     conf = track[4]
                     cls = self.names[int(track[5])]
-                    id = track[-1]
-                    label = f'{cls} {conf:.2f} {id}'
-                    plot_one_box(track[0:4], img0, label=label, color=self.colors[0], line_thickness=1)
+                    label = f'{cls} {conf:.2f} {self.track_id}'
+                    plot_one_box(self.last_tracked_bb, img0, label=label, color=self.colors[0], line_thickness=1)
                     outputs.append([int(x1),int(y1),int(x2),int(y2)])
-                    string_output += str(int(x1)) + ',' + str(int(y1)) + ',' + str(int(x2)) + ',' + str(int(y2)) + '#'
+                    string_output += str(int(x1)) + ',' + str(int(y1)) + ',' + str(int(x2)) + ',' + str(int(y2)) + '#'   
+  
+                else: #no tracked objects
+                    self.track_id = None
             else:
                 # Write results
                 for *xyxy, conf, cls in reversed(det):
