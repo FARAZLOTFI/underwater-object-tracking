@@ -22,7 +22,7 @@ class YoloV7:
         self.iou_threshold = 0.2
         self.verbose = False
         self.trace = True        
-        self.no_detect_prob = 0.2 #probability in which detections are lost/thrown away. Set to 0 for 'perfect' detections
+        self.no_detect_prob = 0.0 #probability in which detections are lost/thrown away. Set to 0 for 'perfect' detections
 
         #Tracking params
         self.track = True
