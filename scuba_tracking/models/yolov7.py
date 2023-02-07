@@ -18,8 +18,8 @@ class YoloV7:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.half = False # half precision only supported on CUDA
         self.augment = False
-        self.conf_threshold = 0.01
-        self.iou_threshold = 0.1
+        self.conf_threshold = 0.1
+        self.iou_threshold = 0.2
         self.agnostic_nms = False
         self.verbose = False
         self.trace = True        
@@ -27,8 +27,8 @@ class YoloV7:
 
         #Tracking params
         self.track = True
-        self.sort_max_age = 10
-        self.sort_min_hits = 2
+        self.sort_max_age = 1
+        self.sort_min_hits = 3
 
         # Load model
         self.model = attempt_load(config.YOLO_WEIGHTS, map_location=self.device)  # load FP32 model
@@ -108,14 +108,12 @@ class YoloV7:
                     for track in tracked_dets:
                         x1, y1,x2, y2 = track[0:4]
                         conf = track[4]
-                        #print('debug: ',cls)
                         cls = self.names[int(track[5])]
-                        if cls == 'suitcase':
-                            id = track[9]
-                            label = f'{cls} {conf:.2f} {id}'
-                            plot_one_box(track[0:4], img0, label=label, color=self.colors[0], line_thickness=1)
-                            outputs.append([int(x1),int(y1),int(x2),int(y2)])
-                            string_output += str(int(x1)) + ',' + str(int(y1)) + ',' + str(int(x2)) + ',' + str(int(y2)) + '#'
+                        id = track[9]
+                        label = f'{cls} {conf:.2f} {id}'
+                        plot_one_box(track[0:4], img0, label=label, color=self.colors[0], line_thickness=1)
+                        outputs.append([int(x1),int(y1),int(x2),int(y2)])
+                        string_output += str(int(x1)) + ',' + str(int(y1)) + ',' + str(int(x2)) + ',' + str(int(y2)) + '#'
                 else:
                     # Write results
                     for *xyxy, conf, cls in reversed(det):
@@ -135,12 +133,11 @@ class YoloV7:
                     x1, y1,x2, y2 = track[0:4]
                     conf = track[4]
                     cls = self.names[int(track[5])]
-                    if cls == 'suitcase':
-                        id = track[9]
-                        label = f'{cls} {conf:.2f} {id}'
-                        plot_one_box(track[0:4], img0, label=label, color=self.colors[0], line_thickness=1)
-                        outputs.append([int(x1),int(y1),int(x2),int(y2)])
-                        string_output += str(int(x1)) + ',' + str(int(y1)) + ',' + str(int(x2)) + ',' + str(int(y2)) + '#'
+                    id = track[9]
+                    label = f'{cls} {conf:.2f} {id}'
+                    plot_one_box(track[0:4], img0, label=label, color=self.colors[0], line_thickness=1)
+                    outputs.append([int(x1),int(y1),int(x2),int(y2)])
+                    string_output += str(int(x1)) + ',' + str(int(y1)) + ',' + str(int(x2)) + ',' + str(int(y2)) + '#'
 
             if self.verbose:
                 # Print time (inference + NMS)
