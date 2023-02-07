@@ -252,7 +252,7 @@ class controller(Node):
         state = torch.tensor(self.obs, dtype=torch.float32, device=self.RL_controller.device).unsqueeze(0)
         
         ############# check the situation to be controllable by RL at low risk of losing the target #############
-        PID_con_contribution = 0.0# max -> 0.5
+        PID_con_contribution = 0.1# max -> 0.5
         PID_random_contribution = 0.0 # max -> 1
         if ((PID_con_contribution * self.image_size[0] < mean_of_obj_locations[0] < (1-PID_con_contribution) * self.image_size[0]) and
                 (PID_con_contribution * self.image_size[1] < mean_of_obj_locations[1] < (1-PID_con_contribution) * self.image_size[1])) \
@@ -297,7 +297,7 @@ class controller(Node):
                 #np.save(self.RL_controller.path_to_gathered_data + str(self.RL_controller.num_of_experiments), self.RL_controller.ERM.memory)
                 print('ERM saved!')
                 #np.save(self.RL_controller.path_to_gathered_data + 'scenario#' +str(self.RL_controller.num_of_experiments), self.trajectory)
-            self.RL_controller.learn()
+            #####self.RL_controller.learn()
 
             # the sample counter is used to update a random target for the PID controllers
             self.sample_counter += 1
@@ -337,10 +337,10 @@ class controller(Node):
         lin_vel = 0.0
         if self.rightSideChecked:
             # right direction
-            yaw_rate = -1.0
+            yaw_rate = -0.3
         else:
             # left direction
-            yaw_rate = 1.0
+            yaw_rate = 0.3
 
         if self.upSideChecked:
             # go to the down direction
@@ -418,7 +418,7 @@ class DQN_approach:
         sample = random.random()
         eps_threshold = self.EPS_END + (self.EPS_START - self.EPS_END) * \
                         math.exp(-1. * self.steps_done / self.EPS_DECAY)
-        if np.random.rand()>0.05:#sample > eps_threshold:
+        if np.random.rand()>0.0:#sample > eps_threshold:
             with torch.no_grad():
                 # t.max(1) will return largest column value of each row.
                 # second column on max result is index of where max element was

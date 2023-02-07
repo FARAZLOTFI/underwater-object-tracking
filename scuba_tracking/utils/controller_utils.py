@@ -8,9 +8,9 @@ class PID_controller:
         self.reset()
         # gains
         self.integral_filtering = 0.95
-        self.area_controller_gains = [-8,0,0] #[-8,-2,0]
-        self.x_controller_gains = [2,0,0]#[2,1,0]
-        self.y_controller_gains = [0.13,0,0]#[0.13,2,0]
+        self.area_controller_gains = [-8,-2,0] #[-8,-2,0]
+        self.x_controller_gains = [2,1,0]#[2,1,0]
+        self.y_controller_gains = [0.5,1,0]#[0.13,2,0]
         self.single_object_tracking = single_object_tracking
         #self.reference_values = reference_values
         self.image_size = config.IMAGE_SIZE
@@ -58,6 +58,7 @@ class PID_controller:
         self.y_controller_output = self.generate_controller_output(self.y_controller_gains, [y_P, y_D, y_I])
 
         # SAFETY MECHANISM # @@@
+        print('current observation:', current_observation[2])
         if (current_observation[2] - self.BB_MAX)>0:
             self.x_controller_output = 0.0
             self.y_controller_output = 0.0

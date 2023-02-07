@@ -1,5 +1,5 @@
 NEWER_VERSION = True
-REAL_WORLD = False
+REAL_WORLD = True
 
 if NEWER_VERSION:
     CAMERA_TOPIC = '/fl_cam/aqua_fl_cam/image_raw/compressed'
@@ -13,14 +13,14 @@ GENERATED_BB_TOPIC = '/aqua/detected_objects'
 COMMAND_TOPIC = '/aqua/command'
 
 if REAL_WORLD:
-    YOLO_WEIGHTS = './src/weights/vdd_weights.pt'
+    YOLO_WEIGHTS = './src/weights/all.pt' #'./src/weights/vdd_weights.pt' #
 else:
     YOLO_WEIGHTS = './src/weights/simulator_weights.pt'
 
 RL_CHECKPOINT = './RL_checkpoint/training_checkpoint'
 IMAGE_SIZE = (416, 416)
-BB_AREA_THRESHOLD = (IMAGE_SIZE[0]/3)*(IMAGE_SIZE[1]/3)
-BB_AREA_MAX = (IMAGE_SIZE[0]/2.9)*(IMAGE_SIZE[1]/2.9) # SAFETY DISTANCE!!
+BB_AREA_THRESHOLD = 19000#(IMAGE_SIZE[0]/3)*(IMAGE_SIZE[1]/3)
+BB_AREA_MAX = 27000###(IMAGE_SIZE[0]/2.9)*(IMAGE_SIZE[1]/2.9) # SAFETY DISTANCE!!
 
 PID_RANDOM_TARGET_MODE = False
 SATURATED_PID = True

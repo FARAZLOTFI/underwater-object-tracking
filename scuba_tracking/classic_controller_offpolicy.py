@@ -35,7 +35,7 @@ class controller(Node):
         ### To gather data while exploring the space by our controller
         self.previous_state = []
         self.batch_for_RL = []
-        self.exploration_mode = False
+        self.exploration_mode = True
         self.path_to_gathered_data = './sampled_scenarios/'
         if not os.path.isdir(self.path_to_gathered_data):
             os.mkdir(self.path_to_gathered_data)
@@ -147,9 +147,9 @@ class controller(Node):
             # self.excel_writer.write(self.sample_counter, 3, str(reward)) # to preserve the unity
             # Saving as npy
             self.batch_for_RL.append([self.previous_state, np.array(self.previous_action),
-                                      mean_of_obj_locations, reward, time.time() - self.last_time])
+                                      mean_of_obj_locations])
 
-            if self.sample_counter%400:
+            if self.sample_counter%50:
                 np.save(self.path_to_gathered_data+'scenario#'+str(self.num_of_experiments), self.batch_for_RL)
 
             # random exploration 20% chance
