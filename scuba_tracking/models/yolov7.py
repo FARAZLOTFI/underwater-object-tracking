@@ -6,7 +6,7 @@ from src.scuba_tracking.scuba_tracking.utils.general import check_img_size, non_
 from src.scuba_tracking.scuba_tracking.utils.plots import plot_one_box
 from src.scuba_tracking.scuba_tracking.utils.torch_utils import time_synchronized, TracedModel
 from src.scuba_tracking.scuba_tracking.utils.datasets import letterbox
-from src.scuba_tracking.scuba_tracking.utils.sort import Sort, iou_batch
+from src.scuba_tracking.scuba_tracking.utils.sort import Sort, iou_batch, centroid_batch
 import random
 from src.scuba_tracking.scuba_tracking.config import config
 
@@ -114,7 +114,13 @@ class YoloV7:
                         if self.last_tracked_bb is None: 
                             track = tracked_dets[np.argmax(tracked_dets[:,4]), :] #initialize track to bb with highest confidence
                         else: 
-                            track = tracked_dets[np.argmax(iou_batch(tracked_dets, self.last_tracked_bb))] #set track to closest in iou to previously tracked bb
+                            #two metrics to determine new bounding box to track. Pick one
+
+                            #max iou similarity to previously detected track
+                            # track = tracked_dets[np.argmax(iou_batch(tracked_dets, self.last_tracked_bb))] 
+                            
+                            #min centroid distance to previously detected track
+                            track = tracked_dets[np.argmin(centroid_batch(tracked_dets, self.last_tracked_bb))] 
                     else: 
                         track = tracked_dets[np.where(tracked_dets[:,-1] == self.track_id)] #set track by id 
                         if len(track): #id was found

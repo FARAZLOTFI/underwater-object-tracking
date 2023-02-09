@@ -24,6 +24,26 @@ def iou_batch(bb_test, bb_gt):
     + (bb_gt[..., 2] - bb_gt[..., 0]) * (bb_gt[..., 3] - bb_gt[..., 1]) - wh)                                              
   return(o)  
 
+def centroid_batch(bb_test, bb_gt):
+  """
+  Computes centroid distance between two bboxes in the form [x1,y1,x2,y2]
+  """
+  bb_gt = np.expand_dims(bb_gt, 0)
+  bb_test = np.expand_dims(bb_test, 1)
+
+  w_test = np.abs((bb_test[...,2] - bb_test[...,0]))
+  h_test = np.abs((bb_test[...,3] - bb_test[...,1]))
+  xc_test = bb_test[...,0] + w_test/2
+  yc_test = bb_test[...,1] + h_test/2
+
+  w_gt = np.abs((bb_gt[...,2] - bb_gt[...,0]))
+  h_gt = np.abs((bb_gt[...,3] - bb_gt[...,1]))
+  xc_gt = bb_gt[...,0] + w_gt/2
+  yc_gt = bb_gt[...,1] + h_gt/2
+  o = np.sqrt(np.square(xc_test - xc_gt) + np.square(yc_test - yc_gt))                          
+  return(o)  
+
+
 
 def convert_bbox_to_z(bbox):
   """
