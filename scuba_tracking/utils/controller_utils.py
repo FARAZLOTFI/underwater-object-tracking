@@ -8,9 +8,9 @@ class PID_controller:
         self.reset()
         # gains
         self.integral_filtering = 0.95
-        self.area_controller_gains = [-8,-2,0] #[-8,-2,0]
-        self.x_controller_gains = [2,1,0]#[2,1,0]
-        self.y_controller_gains = [0.5,1,0]#[0.13,2,0]
+        self.area_controller_gains = [-0.5,0,0] #[-8,-2,0] sim - another option for real
+        self.x_controller_gains = [0.9,0.1,0]#[2,1,0] sim - 2,5,4 in real another option for real [0.9,0.1,0.0]
+        self.y_controller_gains = [0.1,0.0,0]#[0.13,2,0]
         self.single_object_tracking = single_object_tracking
         #self.reference_values = reference_values
         self.image_size = config.IMAGE_SIZE

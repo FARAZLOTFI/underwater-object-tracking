@@ -13,21 +13,21 @@ GENERATED_BB_TOPIC = '/aqua/detected_objects'
 COMMAND_TOPIC = '/aqua/command'
 
 if REAL_WORLD:
-    YOLO_WEIGHTS = './src/weights/all.pt' #'./src/weights/vdd_weights.pt' #
+    YOLO_WEIGHTS = './src/weights/vdd_weights.pt' #'./src/weights/vdd_weights.pt' #
 else:
     YOLO_WEIGHTS = './src/weights/simulator_weights.pt'
 
 RL_CHECKPOINT = './RL_checkpoint/training_checkpoint'
 IMAGE_SIZE = (416, 416)
-BB_AREA_THRESHOLD = 19000#(IMAGE_SIZE[0]/3)*(IMAGE_SIZE[1]/3)
-BB_AREA_MAX = 27000###(IMAGE_SIZE[0]/2.9)*(IMAGE_SIZE[1]/2.9) # SAFETY DISTANCE!!
+BB_AREA_THRESHOLD = 20000#(IMAGE_SIZE[0]/3)*(IMAGE_SIZE[1]/3)
+BB_AREA_MAX = 1000*27000###(IMAGE_SIZE[0]/2.9)*(IMAGE_SIZE[1]/2.9) # SAFETY DISTANCE!!
 
 PID_RANDOM_TARGET_MODE = False
 SATURATED_PID = True
 
-MIN_YAW_RATE = -0.5
-MAX_YAW_RATE = 0.5
-MIN_PITCH_RATE = -0.05
-MAX_PITCH_RATE = 0.05
+MIN_YAW_RATE = -0.5#-1.0
+MAX_YAW_RATE = 0.5#1.0
+MIN_PITCH_RATE = -0.1
+MAX_PITCH_RATE = 0.1
 
 

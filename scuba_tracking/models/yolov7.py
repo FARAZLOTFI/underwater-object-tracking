@@ -6,7 +6,7 @@ from src.scuba_tracking.scuba_tracking.utils.general import check_img_size, non_
 from src.scuba_tracking.scuba_tracking.utils.plots import plot_one_box
 from src.scuba_tracking.scuba_tracking.utils.torch_utils import time_synchronized, TracedModel
 from src.scuba_tracking.scuba_tracking.utils.datasets import letterbox
-from src.scuba_tracking.scuba_tracking.utils.sort import Sort
+from src.scuba_tracking.scuba_tracking.utils.sort import Sort, iou_batch
 import random
 from src.scuba_tracking.scuba_tracking.config import config
 
@@ -20,15 +20,16 @@ class YoloV7:
         self.augment = False
         self.conf_threshold = 0.1
         self.iou_threshold = 0.2
-        self.agnostic_nms = False
         self.verbose = False
         self.trace = True        
         self.no_detect_prob = 0.0 #probability in which detections are lost/thrown away. Set to 0 for 'perfect' detections
 
         #Tracking params
         self.track = True
-        self.sort_max_age = 1
-        self.sort_min_hits = 3
+        self.sort_max_age = 10
+        self.sort_min_hits = 4
+        self.track_id = None
+        self.last_tracked_bb = None
 
         # Load model
         self.model = attempt_load(config.YOLO_WEIGHTS, map_location=self.device)  # load FP32 model
@@ -81,7 +82,7 @@ class YoloV7:
             pred = self.model(img, augment=self.augment)[0]
         t2 = time_synchronized()
         # Apply NMS
-        pred = non_max_suppression(pred, self.conf_threshold, self.iou_threshold, classes=None, agnostic=self.agnostic_nms)
+        pred = non_max_suppression(pred, self.conf_threshold, self.iou_threshold, classes=None)
         t3 = time_synchronized()
         outputs = []
         string_output = '#'
@@ -96,49 +97,54 @@ class YoloV7:
                     n = (det[:, -1] == c).sum()  # detections per class
                     s += f"{n} {self.names[int(c)]}{'s' * (n > 1)}, "  # add to string
 
-                if self.track:
-                    #Track
-                    dets_to_sort = np.empty((0,6))
-                    for x1,y1,x2,y2,conf,detclass in det.cpu().detach().numpy():
-                        if random.random() > self.no_detect_prob:
-                            dets_to_sort = np.vstack((dets_to_sort, 
-                                        np.array([x1, y1, x2, y2, conf, detclass])))
-                    tracked_dets = self.sort_tracker.update(dets_to_sort)
-                    # Write results
-                    for track in tracked_dets:
-                        x1, y1,x2, y2 = track[0:4]
-                        conf = track[4]
-                        cls = self.names[int(track[5])]
-                        id = track[9]
-                        label = f'{cls} {conf:.2f} {id}'
-                        plot_one_box(track[0:4], img0, label=label, color=self.colors[0], line_thickness=1)
-                        outputs.append([int(x1),int(y1),int(x2),int(y2)])
-                        string_output += str(int(x1)) + ',' + str(int(y1)) + ',' + str(int(x2)) + ',' + str(int(y2)) + '#'
-                else:
-                    # Write results
-                    for *xyxy, conf, cls in reversed(det):
-                        if random.random() > self.no_detect_prob:
-                            x1, y1,x2, y2 = (torch.FloatTensor(xyxy)).detach().cpu().numpy()#*image_size/grid_dim
-                            if(conf > self.conf_threshold):
-                                label = f'{self.names[int(cls)]} {conf:.2f}'
-                                plot_one_box(xyxy, img0, label=label, color=self.colors[int(cls)], line_thickness=1)
-                                outputs.append([int(x1),int(y1),int(x2),int(y2)])
-                                string_output += str(int(x1)) + ',' + str(int(y1)) + ',' + str(int(x2)) + ',' + str(int(y2)) + '#'
-            elif self.track:
-                #no detections but we still want to update trackers
                 dets_to_sort = np.empty((0,6))
+                for x1,y1,x2,y2,conf,detclass in det.cpu().detach().numpy():
+                    if random.random() > self.no_detect_prob:
+                        dets_to_sort = np.vstack((dets_to_sort, 
+                                    np.array([x1, y1, x2, y2, conf, detclass])))
+            else:
+                dets_to_sort = np.empty((0,6))
+
+            if self.track:
                 tracked_dets = self.sort_tracker.update(dets_to_sort)
-                # Write results
-                for track in tracked_dets:
-                    x1, y1,x2, y2 = track[0:4]
+                
+                if len(tracked_dets): #if at least one object is being tracked
+
+                    if self.track_id is None: 
+                        if self.last_tracked_bb is None: 
+                            track = tracked_dets[np.argmax(tracked_dets[:,4]), :] #initialize track to bb with highest confidence
+                        else: 
+                            track = tracked_dets[np.argmax(iou_batch(tracked_dets, self.last_tracked_bb))] #set track to closest in iou to previously tracked bb
+                    else: 
+                        track = tracked_dets[np.where(tracked_dets[:,-1] == self.track_id)] #set track by id 
+                        if len(track): #id was found
+                            track = track[0]
+                        else: #id not found - reset and continue
+                            self.track_id = None
+                            continue
+                    
+                    self.last_tracked_bb = track[0:4]
+                    self.track_id = track[-1]
+                    x1, y1,x2, y2 = self.last_tracked_bb
                     conf = track[4]
                     cls = self.names[int(track[5])]
-                    id = track[9]
-                    label = f'{cls} {conf:.2f} {id}'
-                    plot_one_box(track[0:4], img0, label=label, color=self.colors[0], line_thickness=1)
+                    label = f'{cls} {conf:.2f} {self.track_id}'
+                    plot_one_box(self.last_tracked_bb, img0, label=label, color=self.colors[0], line_thickness=1)
                     outputs.append([int(x1),int(y1),int(x2),int(y2)])
-                    string_output += str(int(x1)) + ',' + str(int(y1)) + ',' + str(int(x2)) + ',' + str(int(y2)) + '#'
-
+                    string_output += str(int(x1)) + ',' + str(int(y1)) + ',' + str(int(x2)) + ',' + str(int(y2)) + '#'   
+  
+                else: #no tracked objects
+                    self.track_id = None
+            else:
+                # Write results
+                for *xyxy, conf, cls in reversed(det):
+                    if random.random() > self.no_detect_prob:
+                        x1, y1,x2, y2 = (torch.FloatTensor(xyxy)).detach().cpu().numpy()#*image_size/grid_dim
+                        if(conf > self.conf_threshold):
+                            label = f'{self.names[int(cls)]} {conf:.2f}'
+                            plot_one_box(xyxy, img0, label=label, color=self.colors[int(cls)], line_thickness=1)
+                            outputs.append([int(x1),int(y1),int(x2),int(y2)])
+                            string_output += str(int(x1)) + ',' + str(int(y1)) + ',' + str(int(x2)) + ',' + str(int(y2)) + '#'
             if self.verbose:
                 # Print time (inference + NMS)
                 print(f'{s}Done. ({(1E3 * (t2 - t1)):.1f}ms) Inference, ({(1E3 * (t3 - t2)):.1f}ms) NMS')

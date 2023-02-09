@@ -50,6 +50,7 @@ class controller(Node):
         #self.excel_writer = workbook.add_worksheet()
         self.sample_counter = 0
 
+        self.dataset_gathering = []
         self.debug = True
         self.image_size = config.IMAGE_SIZE
         self.image_area = self.image_size[0]*self.image_size[1]
@@ -64,13 +65,13 @@ class controller(Node):
             String,
             config.GENERATED_BB_TOPIC,
             self.data_handler,
-            30)
+            10)
 
         self.pose_subscription = self.create_subscription(
             Vector3,
             config.ROBOT_POS_TOPIC,
             self.pose_callback,
-            30)
+            10)
 
         self.command_publisher = self.create_publisher(Command, config.COMMAND_TOPIC, 10)
         # This current_state_publisher is to make sure that we have the pair of (state,action)
@@ -94,8 +95,8 @@ class controller(Node):
         self.begin_time_right = time.time()
         self.begin_time_up = time.time()
 
-        self.changing_time_right = 3  # 2 seconds for the beginning
-        self.changing_time_up = 3  # 2 seconds for the beginning
+        self.changing_time_right = 6  # 2 seconds for the beginning
+        self.changing_time_up = 6  # 2 seconds for the beginning
 
         if last_obj_location is not None:
             # we add a 10 pixel threshold to increase the certainty
@@ -202,7 +203,6 @@ class controller(Node):
                     else:
                         pitch_ref = np.minimum(config.MAX_PITCH_RATE,pitch_ref)
 
-                print('PID: ', [yaw_ref, pitch_ref])
                 ################## For the recovery part #######################
                 self.reset_recovery_variables(mean_of_obj_locations)
             else:
@@ -252,8 +252,8 @@ class controller(Node):
         state = torch.tensor(self.obs, dtype=torch.float32, device=self.RL_controller.device).unsqueeze(0)
         
         ############# check the situation to be controllable by RL at low risk of losing the target #############
-        PID_con_contribution = 0.1# max -> 0.5
-        PID_random_contribution = 0.0 # max -> 1
+        PID_con_contribution = 0.0# max -> 0.5
+        PID_random_contribution = 0.5 # max -> 1
         if ((PID_con_contribution * self.image_size[0] < mean_of_obj_locations[0] < (1-PID_con_contribution) * self.image_size[0]) and
                 (PID_con_contribution * self.image_size[1] < mean_of_obj_locations[1] < (1-PID_con_contribution) * self.image_size[1])) \
                 and np.random.rand()>PID_random_contribution:
@@ -261,12 +261,15 @@ class controller(Node):
             yaw_ref = self.RL_actions_list_yaw[NN_output[0].view(-1)[0].cpu().detach().numpy()]  # this we don't use now
             pitch_ref = self.RL_actions_list_pitch[NN_output[1].view(-1)[0].cpu().detach().numpy()]  # this we don't use now
             print('RL: ',[yaw_ref,pitch_ref])
+        else:
+            print('PID: ', [yaw_ref, pitch_ref])
+
         ########################## apply the control to the robot #############################
         # saturated input control to limit the power of the PID controller
         self.direct_command.yaw = yaw_ref #>0 right
         self.direct_command.pitch = pitch_ref #>0 down
         self.direct_command.speed = speed_ref
-        self.direct_command.roll = 0.0 * (np.random.rand() - 1)
+        self.direct_command.roll = 0.0
         if self.debug:
             print('speed ref: ', speed_ref)
             pass
@@ -278,7 +281,6 @@ class controller(Node):
             self.direct_command.speed = 0.0
             self.direct_command.roll = 0.0
         ####################################################################################
-
         self.command_publisher.publish(self.direct_command)
         self.current_state_publisher.publish(msg)
 
@@ -293,11 +295,12 @@ class controller(Node):
 
 
             self.RL_controller.ERM.push(self.previous_state, self.previous_action, self.obs, yaw_reward, pitch_reward)
+            self.dataset_gathering.append([self.previous_state, self.previous_action, self.obs, yaw_reward, pitch_reward])
             if self.sample_counter % 1000 == 0:
-                #np.save(self.RL_controller.path_to_gathered_data + str(self.RL_controller.num_of_experiments), self.RL_controller.ERM.memory)
+                np.save(self.RL_controller.path_to_gathered_data + str(self.RL_controller.num_of_experiments), self.dataset_gathering)
                 print('ERM saved!')
-                #np.save(self.RL_controller.path_to_gathered_data + 'scenario#' +str(self.RL_controller.num_of_experiments), self.trajectory)
-            #####self.RL_controller.learn()
+                np.save(self.RL_controller.path_to_gathered_data + 'scenario#' +str(self.RL_controller.num_of_experiments), self.trajectory)
+            self.RL_controller.learn()
 
             # the sample counter is used to update a random target for the PID controllers
             self.sample_counter += 1
@@ -337,16 +340,16 @@ class controller(Node):
         lin_vel = 0.0
         if self.rightSideChecked:
             # right direction
-            yaw_rate = -0.3
+            yaw_rate = -0.0#-0.3
         else:
             # left direction
-            yaw_rate = 0.3
+            yaw_rate = 0.0#0.3
 
         if self.upSideChecked:
             # go to the down direction
-            pitch_rate = 0.1
+            pitch_rate = 0.00
         else:
-            pitch_rate = -0.1
+            pitch_rate = -0.00
         return yaw_rate, pitch_rate, lin_vel
 
 class DQN_approach:
@@ -355,7 +358,7 @@ class DQN_approach:
         self.reset()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self._init_hyperparameters()
-        self.history_buffer_size = 5
+        self.history_buffer_size = 1
         self.num_of_states = 4  # center_x, center_y, area_of_diver_bb, linear_vel
         self.num_of_actions = 5
         self.obs_dim = self.num_of_states * self.history_buffer_size
@@ -424,6 +427,7 @@ class DQN_approach:
                 # second column on max result is index of where max element was
                 # found, so we pick action with the larger expected reward.
                 network_output = self.policy_net(state)
+                print('heeey')
                 return network_output[0].max(1)[1].view(1, 1), network_output[1].max(1)[1].view(1, 1)
         else:
             # now we have two actions

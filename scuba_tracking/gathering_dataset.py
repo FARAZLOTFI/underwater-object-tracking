@@ -31,13 +31,13 @@ class dataset_collector(Node):
             CompressedImage,
             config.CAMERA_TOPIC,
             self.image_handler,
-            30)
+            10)
 
         self.pose_subscription = self.create_subscription(
             Vector3,
             config.ROBOT_POS_TOPIC,
             self.pose_callback,
-            30)
+            10)
 
         self.command_publisher = self.create_publisher(Command, config.COMMAND_TOPIC, 30)
 
