@@ -253,7 +253,7 @@ class controller(Node):
         
         ############# check the situation to be controllable by RL at low risk of losing the target #############
         PID_con_contribution = 0.0# max -> 0.5
-        PID_random_contribution = 0.5 # max -> 1
+        PID_random_contribution = 0.49 # max -> 1
         if ((PID_con_contribution * self.image_size[0] < mean_of_obj_locations[0] < (1-PID_con_contribution) * self.image_size[0]) and
                 (PID_con_contribution * self.image_size[1] < mean_of_obj_locations[1] < (1-PID_con_contribution) * self.image_size[1])) \
                 and np.random.rand()>PID_random_contribution:
@@ -295,8 +295,9 @@ class controller(Node):
 
 
             self.RL_controller.ERM.push(self.previous_state, self.previous_action, self.obs, yaw_reward, pitch_reward)
-            self.dataset_gathering.append([self.previous_state, self.previous_action, self.obs, yaw_reward, pitch_reward])
-            if self.sample_counter % 1000 == 0:
+            self.dataset_gathering.append([*self.previous_state, *self.previous_action,*self.obs, yaw_reward, pitch_reward])
+            print('len of gathered data: ', len(self.dataset_gathering))
+            if self.sample_counter % 100 == 0:
                 np.save(self.RL_controller.path_to_gathered_data + str(self.RL_controller.num_of_experiments), self.dataset_gathering)
                 print('ERM saved!')
                 np.save(self.RL_controller.path_to_gathered_data + 'scenario#' +str(self.RL_controller.num_of_experiments), self.trajectory)
@@ -358,7 +359,7 @@ class DQN_approach:
         self.reset()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self._init_hyperparameters()
-        self.history_buffer_size = 1
+        self.history_buffer_size = 2
         self.num_of_states = 4  # center_x, center_y, area_of_diver_bb, linear_vel
         self.num_of_actions = 5
         self.obs_dim = self.num_of_states * self.history_buffer_size
@@ -421,13 +422,13 @@ class DQN_approach:
         sample = random.random()
         eps_threshold = self.EPS_END + (self.EPS_START - self.EPS_END) * \
                         math.exp(-1. * self.steps_done / self.EPS_DECAY)
-        if np.random.rand()>0.0:#sample > eps_threshold:
+        if np.random.rand()>0.05:#sample > eps_threshold:
             with torch.no_grad():
                 # t.max(1) will return largest column value of each row.
                 # second column on max result is index of where max element was
                 # found, so we pick action with the larger expected reward.
                 network_output = self.policy_net(state)
-                print('heeey')
+
                 return network_output[0].max(1)[1].view(1, 1), network_output[1].max(1)[1].view(1, 1)
         else:
             # now we have two actions
@@ -555,3 +556,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
