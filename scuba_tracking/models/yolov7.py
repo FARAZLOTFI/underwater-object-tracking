@@ -26,7 +26,7 @@ class YoloV7:
 
         #Tracking params
         self.track = True
-        self.sort_max_age = 10
+        self.sort_max_age = 7
         self.sort_min_hits = 4
         self.track_id = None
         self.last_tracked_bb = None

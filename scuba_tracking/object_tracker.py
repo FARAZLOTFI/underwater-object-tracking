@@ -6,7 +6,7 @@
 ############################
 import rclpy
 from cv_bridge import CvBridge
-from sensor_msgs.msg import CompressedImage
+from sensor_msgs.msg import Image
 import cv2
 from rclpy.node import Node
 from src.scuba_tracking.scuba_tracking.models.yolov7 import YoloV7
@@ -29,7 +29,7 @@ class object_tracker(Node):
             depth=1
         )
         self.image_subscription = self.create_subscription(
-            CompressedImage,
+            Image,
             config.CAMERA_TOPIC,
             self.image_handler,
             qos_profile=qos_profile)
@@ -55,7 +55,9 @@ class object_tracker(Node):
         return
 
     def image_handler(self, msg):
-        img = CvBridge().compressed_imgmsg_to_cv2(msg)
+        #img = CvBridge().compressed_imgmsg_to_cv2(msg)
+        img = CvBridge().imgmsg_to_cv2(msg)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
         last_time = time.time()
         img = cv2.resize(img, config.IMAGE_SIZE)
         string_output, outputs, img_ = self.detector.detect(img)

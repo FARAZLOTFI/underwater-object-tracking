@@ -22,7 +22,8 @@ import torch.optim as optim
 ##################################################
 # if source install/setup.bash the msg_ws -> then
 from ir_msgs.msg import Command
-from std_msgs.msg import String
+# for the depth sensor
+from std_msgs.msg import String, Float32
 
 import os, time
 import numpy as np
@@ -51,7 +52,7 @@ class controller(Node):
         self.sample_counter = 0
 
         self.dataset_gathering = []
-        self.debug = True
+        self.debug_mode = True
         self.image_size = config.IMAGE_SIZE
         self.image_area = self.image_size[0]*self.image_size[1]
         self.single_object_tracking = True
@@ -60,6 +61,7 @@ class controller(Node):
         self.target_x = None
         self.target_y = None
         self.target_area = None
+        self.depth_data = 0.0
 
         self.vision_output_subscription = self.create_subscription(
             String,
@@ -73,9 +75,15 @@ class controller(Node):
             self.pose_callback,
             10)
 
+        self.depth_subscription = self.create_subscription(
+            Float32,
+            config.DEPTH_TOPIC,
+            self.depth_sensor,
+            10)
+
         self.command_publisher = self.create_publisher(Command, config.COMMAND_TOPIC, 10)
         # This current_state_publisher is to make sure that we have the pair of (state,action)
-        self.current_state_publisher = self.create_publisher(String, '/aqua/current_state', 10)
+        self.current_state_publisher = self.create_publisher(String, '/aqua/current_state_for_RL', 10)
         # CONTROLLER PART
         self.controller = PID_controller()
         # RL Controller
@@ -161,6 +169,10 @@ class controller(Node):
         else:
             return yaw_rate, pitch_rate
 
+    def depth_sensor(self, msg):
+        #print('depth: ',msg.data)
+        self.depth_data = msg.data
+
     def data_handler(self, msg):
         yaw_ref = 0.0
         pitch_ref = 0.0
@@ -172,7 +184,9 @@ class controller(Node):
         ######################################################
         SAFETY_MECHANISM = False
         ############### SAFETY MECHANISM ######################
-        if (mean_of_obj_locations[2] - config.BB_AREA_MAX) > 0:
+        if self.debug_mode:
+            print('Depth_data: ',self.depth_data)
+        if (mean_of_obj_locations[2] - config.BB_AREA_MAX) > 0 or self.depth_data>config.MAX_DEPTH:
             SAFETY_MECHANISM = True
         # the default mode is to keep the target at the center point
         if not config.PID_RANDOM_TARGET_MODE:
@@ -224,7 +238,9 @@ class controller(Node):
                 up_seen = 0.0
 
             #-25 is set based oSAFETY_MECHANISMn the noises considered in the following
-            mean_of_obj_locations = np.array([right_seen, up_seen, -25.0])
+            mean_of_obj_locations = np.array([right_seen, up_seen, 25000.0])
+            if self.debug_mode:
+                print('Observations coming: ',mean_of_obj_locations)
             self.lost_target_step += 1
 
             spiral_search_flag = True
@@ -253,26 +269,25 @@ class controller(Node):
         
         ############# check the situation to be controllable by RL at low risk of losing the target #############
         PID_con_contribution = 0.0# max -> 0.5
-        PID_random_contribution = 0.5 # max -> 1
+        PID_random_contribution = 0.49 # max -> 1
         if ((PID_con_contribution * self.image_size[0] < mean_of_obj_locations[0] < (1-PID_con_contribution) * self.image_size[0]) and
                 (PID_con_contribution * self.image_size[1] < mean_of_obj_locations[1] < (1-PID_con_contribution) * self.image_size[1])) \
                 and np.random.rand()>PID_random_contribution:
             NN_output = self.RL_controller.select_action(state)
             yaw_ref = self.RL_actions_list_yaw[NN_output[0].view(-1)[0].cpu().detach().numpy()]  # this we don't use now
             pitch_ref = self.RL_actions_list_pitch[NN_output[1].view(-1)[0].cpu().detach().numpy()]  # this we don't use now
-            print('RL: ',[yaw_ref,pitch_ref])
-        else:
-            print('PID: ', [yaw_ref, pitch_ref])
-
+            if self.debug_mode:
+                print('RL: ',[yaw_ref,pitch_ref])
+        elif not spiral_search_flag:
+            if self.debug_mode:
+                print('PID: ', [yaw_ref, pitch_ref])
+            pass
         ########################## apply the control to the robot #############################
         # saturated input control to limit the power of the PID controller
         self.direct_command.yaw = yaw_ref #>0 right
         self.direct_command.pitch = pitch_ref #>0 down
         self.direct_command.speed = speed_ref
         self.direct_command.roll = 0.0
-        if self.debug:
-            print('speed ref: ', speed_ref)
-            pass
 
         ####################################### SAFETY MECHANISM ###########################
         if SAFETY_MECHANISM:
@@ -281,7 +296,9 @@ class controller(Node):
             self.direct_command.speed = 0.0
             self.direct_command.roll = 0.0
         ####################################################################################
-        self.command_publisher.publish(self.direct_command)
+        if self.debug_mode:
+            print('forward speed: ',speed_ref)
+        #self.command_publisher.publish(self.direct_command)
         self.current_state_publisher.publish(msg)
 
         ####################### online RL part ########################################################
@@ -290,17 +307,22 @@ class controller(Node):
             ## reward calculation
 
             yaw_reward, pitch_reward = self.reward_calculation(current_observation)
-            print('rewards: ',yaw_reward,pitch_reward)
+            if self.debug_mode:
+                print('rewards: ',yaw_reward,pitch_reward)
             # Store the transition in memory self.previous_state, self.previous_action, state, reward
 
 
             self.RL_controller.ERM.push(self.previous_state, self.previous_action, self.obs, yaw_reward, pitch_reward)
-            self.dataset_gathering.append([self.previous_state, self.previous_action, self.obs, yaw_reward, pitch_reward])
-            if self.sample_counter % 1000 == 0:
+            self.dataset_gathering.append([*self.previous_state, *self.previous_action,*self.obs, yaw_reward, pitch_reward])
+            if self.debug_mode:
+                print('len of gathered data: ', len(self.dataset_gathering))
+            if self.sample_counter % 100 == 0:
                 np.save(self.RL_controller.path_to_gathered_data + str(self.RL_controller.num_of_experiments), self.dataset_gathering)
-                print('ERM saved!')
-                np.save(self.RL_controller.path_to_gathered_data + 'scenario#' +str(self.RL_controller.num_of_experiments), self.trajectory)
-            self.RL_controller.learn()
+                if self.debug_mode:
+                    print('Data saved!')
+                #np.save(self.RL_controller.path_to_gathered_data + 'scenario#' +str(self.RL_controller.num_of_experiments), self.trajectory)
+            if config.ONLINE_IMPROVEMENT:
+                self.RL_controller.learn()
 
             # the sample counter is used to update a random target for the PID controllers
             self.sample_counter += 1
@@ -340,16 +362,16 @@ class controller(Node):
         lin_vel = 0.0
         if self.rightSideChecked:
             # right direction
-            yaw_rate = -0.0#-0.3
+            yaw_rate = -0.5#-0.3
         else:
             # left direction
-            yaw_rate = 0.0#0.3
+            yaw_rate = 0.5#0.3
 
         if self.upSideChecked:
             # go to the down direction
-            pitch_rate = 0.00
+            pitch_rate = 0.02
         else:
-            pitch_rate = -0.00
+            pitch_rate = -0.02
         return yaw_rate, pitch_rate, lin_vel
 
 class DQN_approach:
@@ -358,7 +380,7 @@ class DQN_approach:
         self.reset()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self._init_hyperparameters()
-        self.history_buffer_size = 1
+        self.history_buffer_size = 5
         self.num_of_states = 4  # center_x, center_y, area_of_diver_bb, linear_vel
         self.num_of_actions = 5
         self.obs_dim = self.num_of_states * self.history_buffer_size
@@ -369,9 +391,7 @@ class DQN_approach:
 
         self.optimizer = optim.AdamW(self.policy_net.parameters(), lr=self.LR, amsgrad=True)
 
-        self.debug_mode = False
-        if self.debug_mode:
-            summary(self.policy_net, (1, self.obs_dim))
+        #summary(self.policy_net, (1, self.obs_dim))
 
         self.CHECKPOINT_PATH = config.RL_CHECKPOINT
 
@@ -421,13 +441,13 @@ class DQN_approach:
         sample = random.random()
         eps_threshold = self.EPS_END + (self.EPS_START - self.EPS_END) * \
                         math.exp(-1. * self.steps_done / self.EPS_DECAY)
-        if np.random.rand()>0.0:#sample > eps_threshold:
+        if np.random.rand()>0.01:#sample > eps_threshold:
             with torch.no_grad():
                 # t.max(1) will return largest column value of each row.
                 # second column on max result is index of where max element was
                 # found, so we pick action with the larger expected reward.
                 network_output = self.policy_net(state)
-                print('heeey')
+
                 return network_output[0].max(1)[1].view(1, 1), network_output[1].max(1)[1].view(1, 1)
         else:
             # now we have two actions
