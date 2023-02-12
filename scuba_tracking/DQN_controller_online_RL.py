@@ -298,7 +298,7 @@ class controller(Node):
         ####################################################################################
         if self.debug_mode:
             print('forward speed: ',speed_ref)
-        #self.command_publisher.publish(self.direct_command)
+        self.command_publisher.publish(self.direct_command)
         self.current_state_publisher.publish(msg)
 
         ####################### online RL part ########################################################

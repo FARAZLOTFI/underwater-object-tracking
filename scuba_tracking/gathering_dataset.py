@@ -7,7 +7,7 @@
 import rclpy
 from geometry_msgs.msg import Vector3
 from cv_bridge import CvBridge
-from sensor_msgs.msg import CompressedImage
+from sensor_msgs.msg import Image
 import cv2
 from rclpy.node import Node
 
@@ -28,7 +28,7 @@ class dataset_collector(Node):
         self.DEBUG = True
 
         self.image_subscription = self.create_subscription(
-            CompressedImage,
+            Image,
             config.CAMERA_TOPIC,
             self.image_handler,
             10)
@@ -49,12 +49,12 @@ class dataset_collector(Node):
             self.num_of_samples = len(os.listdir(self.path_to_gathered_data))
 
         cv2.namedWindow("Front view cam", cv2.WINDOW_NORMAL)
-        cv2.resizeWindow("Front view cam", 500, 400)
+        cv2.resizeWindow("Front view cam", config.IMAGE_SIZE[0], config.IMAGE_SIZE[1])
 
     def image_handler(self, msg):
         global key_
 
-        subscribed_image = CvBridge().compressed_imgmsg_to_cv2(msg, desired_encoding="bgr8")
+        subscribed_image = CvBridge().imgmsg_to_cv2(msg, desired_encoding="bgr8")
 
         self.direct_command.speed = 0.0
         self.direct_command.roll = 0.0
@@ -70,7 +70,7 @@ class dataset_collector(Node):
         elif key_ == 150: # heading right
             self.direct_command.yaw = -1.0
 
-        if key_ == 151:  # arrow key ^
+        if key_ == 151:  # arrow key ^16-a
             self.direct_command.pitch = -0.2
         elif key_ == 153:  #
             self.direct_command.pitch = 0.2
@@ -97,7 +97,6 @@ class dataset_collector(Node):
             print('Captured a photo, we have '+str(self.num_of_samples)+' number of samples now.')
             self.num_of_samples +=1
             time.sleep(0.3)
-
         self.command_publisher.publish(self.direct_command)
 
     def pose_callback(self, msg):
