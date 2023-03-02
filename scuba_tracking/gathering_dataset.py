@@ -98,6 +98,7 @@ class dataset_collector(Node):
             self.num_of_samples +=1
             time.sleep(0.3)
 
+
         self.command_publisher.publish(self.direct_command)
 
     def pose_callback(self, msg):

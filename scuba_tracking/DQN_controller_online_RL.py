@@ -86,7 +86,8 @@ class controller(Node):
         self.RL_actions_list_yaw = np.linspace(config.MIN_YAW_RATE, config.MAX_YAW_RATE, self.RL_controller.num_of_actions, True)
         self.RL_actions_list_pitch = np.linspace(config.MIN_PITCH_RATE, config.MAX_PITCH_RATE, self.RL_controller.num_of_actions, True)
         self.reset_recovery_variables()
-
+        # just for the sake of evaluation
+        self.rewards_list = []
     # We take the last object location to have an estimation of where it should be if was lost
     def reset_recovery_variables(self, last_obj_location=None):
         # For the Recovery part
@@ -148,9 +149,9 @@ class controller(Node):
             yaw_reward = -1
             pitch_reward = -1
 
-        #general_reward = 1/(2*abs(current_observation[1])**2 +  2*abs(current_observation[0])**2 + 1)
+        general_reward = factor_*(1 / (abs(current_observation[0]) + factor_)) + factor_*(1 / (abs(current_observation[1]) + factor_))#1/(2*abs(current_observation[1])**2 +  2*abs(current_observation[0])**2 + 1)
         #general_reward, general_reward
-        return yaw_reward, pitch_reward
+        return general_reward, general_reward#yaw_reward, pitch_reward
 
     def get_action(self, yaw_rate, pitch_rate,discrete=True):
         if discrete:
@@ -181,9 +182,9 @@ class controller(Node):
         else:
             # Otherwise, for exploration purposes
             if self.sample_counter%200 == 0 :
-                self.target_x = np.random.randint(0.2*self.image_size[0], 0.8*self.image_size[0])
-                self.target_y = np.random.randint(0.2*self.image_size[1], 0.8*self.image_size[1])
-                self.target_area = np.random.randint(0.7*self.BB_THRESH, 1.2*self.BB_THRESH)
+                self.target_x = np.random.randint(0.3*self.image_size[0], 0.7*self.image_size[0])
+                self.target_y = np.random.randint(0.3*self.image_size[1], 0.7*self.image_size[1])
+                self.target_area = np.random.randint(0.8*self.BB_THRESH, self.BB_THRESH)
                 print('Target updated! ',[self.target_x,self.target_y,self.target_area])
 
         spiral_search_flag = False
@@ -251,6 +252,7 @@ class controller(Node):
 
         state = torch.tensor(self.obs, dtype=torch.float32, device=self.RL_controller.device).unsqueeze(0)
         
+
         ############# check the situation to be controllable by RL at low risk of losing the target #############
         PID_con_contribution = 0.0# max -> 0.5
         PID_random_contribution = 0.0 # max -> 1
@@ -289,13 +291,18 @@ class controller(Node):
 
             yaw_reward, pitch_reward = self.reward_calculation(current_observation)
             print('rewards: ',yaw_reward,pitch_reward)
+            self.rewards_list.append([yaw_reward, pitch_reward])
             # Store the transition in memory self.previous_state, self.previous_action, state, reward
 
 
             self.RL_controller.ERM.push(self.previous_state, self.previous_action, self.obs, yaw_reward, pitch_reward)
-            if self.sample_counter % 1000 == 0:
+            if self.sample_counter % 100 == 0:
+                self.rewards_list
+                np.save(self.RL_controller.path_to_gathered_data + 'rewards_his2_combined_reward_4',
+                        self.rewards_list)
                 #np.save(self.RL_controller.path_to_gathered_data + str(self.RL_controller.num_of_experiments), self.RL_controller.ERM.memory)
-                print('ERM saved!')
+                print('The overall performance: ',np.mean(np.array(self.rewards_list),0))
+
                 #np.save(self.RL_controller.path_to_gathered_data + 'scenario#' +str(self.RL_controller.num_of_experiments), self.trajectory)
             self.RL_controller.learn()
 
@@ -344,9 +351,9 @@ class controller(Node):
 
         if self.upSideChecked:
             # go to the down direction
-            pitch_rate = 0.1
+            pitch_rate = 0.05
         else:
-            pitch_rate = -0.1
+            pitch_rate = -0.05
         return yaw_rate, pitch_rate, lin_vel
 
 class DQN_approach:
@@ -355,7 +362,7 @@ class DQN_approach:
         self.reset()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self._init_hyperparameters()
-        self.history_buffer_size = 5
+        self.history_buffer_size = 2
         self.num_of_states = 4  # center_x, center_y, area_of_diver_bb, linear_vel
         self.num_of_actions = 5
         self.obs_dim = self.num_of_states * self.history_buffer_size
@@ -418,7 +425,7 @@ class DQN_approach:
         sample = random.random()
         eps_threshold = self.EPS_END + (self.EPS_START - self.EPS_END) * \
                         math.exp(-1. * self.steps_done / self.EPS_DECAY)
-        if np.random.rand()>0.05:#sample > eps_threshold:
+        if np.random.rand()>0.1: #sample > eps_threshold:
             with torch.no_grad():
                 # t.max(1) will return largest column value of each row.
                 # second column on max result is index of where max element was
