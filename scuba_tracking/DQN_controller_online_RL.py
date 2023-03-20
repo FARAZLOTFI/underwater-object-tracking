@@ -39,7 +39,7 @@ Transition = namedtuple('Transition',
 class InvalidWindowSize(Exception):
     print('Window size must be greater than zero! ')
 class reward_shaping:
-    def __init__(self, window_size = 1, include_detection_confidence = 0.0 ):
+    def __init__(self, window_size = 2, include_detection_confidence = 0.0 ):
         if window_size<1:
             print('episodic view')
         self.k_step = window_size
@@ -71,11 +71,12 @@ class reward_shaping:
                     reward_conf = 0.0
             else:
                 reward_conf = 0.0
-            scaler = 0
+
+            variance_scaler = 0 # 200
             #
             print('variance: ',np.array(self.yaw_reward).var(), np.array(self.pitch_reward).var(), reward_conf)
-            return yaw_reward - scaler * np.array(self.yaw_reward).var() + self.include_detection_confidence * reward_conf , \
-                   pitch_reward - scaler * np.array(self.pitch_reward).var() + self.include_detection_confidence * reward_conf , [yaw_reward, pitch_reward, detection_conf]
+            return yaw_reward - variance_scaler * np.array(self.yaw_reward).var() + self.include_detection_confidence * reward_conf , \
+                   pitch_reward - variance_scaler * np.array(self.pitch_reward).var() + self.include_detection_confidence * reward_conf , [yaw_reward, pitch_reward, detection_conf]
 
         else: # this part must be modified
             if abs(current_observation[0])<self.boundaries and abs(current_observation[1])<self.boundaries :
@@ -190,7 +191,7 @@ class controller(Node):
         # just for the sake of evaluation
         self.rewards_list = []
 
-        self.reward_calculation = reward_shaping(10,0.0)
+        self.reward_calculation = reward_shaping()
     # We take the last object location to have an estimation of where it should be if was lost
     def reset_recovery_variables(self, last_obj_location=None):
         # For the Recovery part
@@ -434,7 +435,7 @@ class DQN_approach:
         self.reset()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self._init_hyperparameters()
-        self.history_buffer_size = 1
+        self.history_buffer_size = 2
         self.num_of_states = 4  # center_x, center_y, area_of_diver_bb, linear_vel
         self.num_of_actions = 5
         self.obs_dim = self.num_of_states * self.history_buffer_size
@@ -481,7 +482,7 @@ class DQN_approach:
         # TAU is the update rate of the target network
         # LR is the learning rate of the AdamW optimizer
         self.BATCH_SIZE = 50
-        self.GAMMA = 0.5
+        self.GAMMA = 0.99
         self.EPS_START = 0.9
         self.EPS_END = 0.05
         self.EPS_DECAY = 1000
