@@ -44,12 +44,15 @@ class reward_shaping:
             print('episodic view')
         self.k_step = window_size
         self.include_detection_confidence = include_detection_confidence
-        self.boundaries = 0.8
+        self.boundaries = config.IMAGE_ARTIFICAL_BOUNDARIES
         self.tracked_frame = 0
         self.yaw_reward = []
         self.pitch_reward = []
+        self.flag_done = False
+        self.sample_step = 0
     def __call__(self,current_observation, detection_conf = 0.0 ):
         yaw_reward, pitch_reward = self.single_observation(current_observation)
+
         if self.k_step > 1:
 
             if len(self.yaw_reward)>(self.k_step-1):
@@ -75,24 +78,36 @@ class reward_shaping:
             #
             print('variance: ',np.array(self.yaw_reward).var(), np.array(self.pitch_reward).var(), reward_conf)
             return yaw_reward - scaler * np.array(self.yaw_reward).var() + self.include_detection_confidence * reward_conf , \
-                   pitch_reward - scaler * np.array(self.pitch_reward).var() + self.include_detection_confidence * reward_conf , [yaw_reward, pitch_reward, detection_conf]
+                   pitch_reward - scaler * np.array(self.pitch_reward).var() + self.include_detection_confidence * reward_conf , [yaw_reward, pitch_reward, detection_conf],self.flag_done
 
         else: # this part must be modified
-            if abs(current_observation[0])<self.boundaries and abs(current_observation[1])<self.boundaries :
+
+            if abs(current_observation[0])<self.boundaries and abs(current_observation[1])<self.boundaries and (self.sample_step<config.MAX_EPISODE) :
+                self.flag_done = False
                 self.yaw_reward.append(yaw_reward)
                 self.pitch_reward.append(pitch_reward)
-                self.tracked_frame += 0.01
-                return 0,0, [yaw_reward,pitch_reward]
+                self.sample_step += 1 # samples per episode
+                return yaw_reward, pitch_reward, [yaw_reward,pitch_reward],self.flag_done
             else:
-                expected_yaw_rew = np.array(self.yaw_reward).mean()
-                expected_pitch_rew = np.array(self.pitch_reward).mean()
+                expected_yaw_rew = np.array(self.yaw_reward).sum()
+                expected_pitch_rew = np.array(self.pitch_reward).sum()
                 var_yaw_rew = np.array(self.yaw_reward).var()
                 var_pitch_rew = np.array(self.pitch_reward).var()
-                reached_frames = self.tracked_frame
                 self.yaw_reward = []
                 self.pitch_reward = []
-                self.tracked_frame = 0
-                return reached_frames, reached_frames, [yaw_reward, pitch_reward]
+
+                self.flag_done = True
+                if self.sample_step < config.MAX_EPISODE:
+                    yaw_reward = -1
+                    pitch_reward = -1
+                    if abs(current_observation[0])<self.boundaries:
+                        pitch_reward = None
+                    else:
+                        pitch_reward = None
+
+                self.sample_step = 0
+
+                return yaw_reward, pitch_reward, [yaw_reward, pitch_reward],self.flag_done
 
 
     def single_observation(self, current_observation):
@@ -190,7 +205,7 @@ class controller(Node):
         # just for the sake of evaluation
         self.rewards_list = []
 
-        self.reward_calculation = reward_shaping(10,0.0)
+        self.reward_calculation = reward_shaping(0,0.0)
     # We take the last object location to have an estimation of where it should be if was lost
     def reset_recovery_variables(self, last_obj_location=None):
         # For the Recovery part
@@ -301,7 +316,7 @@ class controller(Node):
         bb_noise_y = np.random.randint(0, 5)
         area_noise = bb_noise_x * bb_noise_y  # this I think must be dependent on the two previous ones
         speed_noise = 0.05 * np.random.rand() # 3
-        detection_confidence_noise = 0.1 * (np.random.rand() - 0.5)
+        #detection_confidence_noise = 0.1 * (np.random.rand() - 0.5)
 
         current_observation = np.array([mean_of_obj_locations[0] + bb_noise_x,
                                         mean_of_obj_locations[1] + bb_noise_y,
@@ -321,11 +336,10 @@ class controller(Node):
         
 
         ############# check the situation to be controllable by RL at low risk of losing the target #############
-        PID_con_contribution = 0.5# max -> 0.5
+        PID_con_contribution = config.IMAGE_ARTIFICAL_BOUNDARIES # max 1
         PID_random_contribution = 0.0 # max -> 1
-        if ((PID_con_contribution * self.image_size[0] < mean_of_obj_locations[0] < (1-PID_con_contribution) * self.image_size[0]) and
-                (PID_con_contribution * self.image_size[1] < mean_of_obj_locations[1] < (1-PID_con_contribution) * self.image_size[1])) \
-                and np.random.rand()>PID_random_contribution:
+        if (abs(current_observation[0])<PID_con_contribution and (abs(current_observation[1])<PID_con_contribution) \
+                and np.random.rand()>PID_random_contribution):
             NN_output = self.RL_controller.select_action(state)
             yaw_ref = self.RL_actions_list_yaw[NN_output[0].view(-1)[0].cpu().detach().numpy()]  # this we don't use now
             pitch_ref = self.RL_actions_list_pitch[NN_output[1].view(-1)[0].cpu().detach().numpy()]  # this we don't use now
@@ -356,20 +370,29 @@ class controller(Node):
         if not (len(self.previous_state) == 0) and not(spiral_search_flag) and not(SAFETY_MECHANISM):
             ## reward calculation
 
-            yaw_reward, pitch_reward, for_evaluation = self.reward_calculation(current_observation, detection_confidence)
-            print('rewards: ',yaw_reward,pitch_reward)
+            yaw_reward, pitch_reward, for_evaluation, flag_done = self.reward_calculation(current_observation, detection_confidence)
+            print('flag done: ',flag_done)
+            print('detail: ',yaw_reward, pitch_reward,  mean_of_obj_locations)
             self.rewards_list.append(for_evaluation)
             # Store the transition in memory self.previous_state, self.previous_action, state, reward
             next_state = np.zeros(len(self.obs))
             next_state += self.obs
-            self.RL_controller.ERM.push(self.previous_state, self.previous_action, next_state, yaw_reward, pitch_reward)
+            if not flag_done:
+                self.RL_controller.ERM.push(self.previous_state, self.previous_action, next_state, yaw_reward, pitch_reward)
+            else: # list starting a new episode
+
+                self.RL_controller.ERM.push_and_reward_modification(self.previous_state, self.previous_action, next_state, yaw_reward,pitch_reward)
+                # I am not reseting the initial condition
+                ##self.previous_action = []
+                ##self.obs = np.zeros(self.RL_controller.history_buffer_size * self.RL_controller.num_of_states)
+                print('episode finished!')
+
             if self.sample_counter % 100 == 0:
                 #self.rewards_list
                 name = 'VAR_rewards_his2_2'
                 np.save(self.RL_controller.path_to_gathered_data +name, self.rewards_list)
                 #np.save(self.RL_controller.path_to_gathered_data + str(self.RL_controller.num_of_experiments), self.RL_controller.ERM.memory)
-
-                print('The overall performance: ',np.mean(np.array(self.rewards_list),0))
+                ##print('The overall performance: ',np.mean(np.array(self.rewards_list),0))
 
                 np.save(self.RL_controller.path_to_gathered_data + name + '_traj', self.trajectory)
             if self.sample_counter % 10 == 0:
@@ -430,11 +453,11 @@ class controller(Node):
 
 class DQN_approach:
     def __init__(self):
-
+        self._init_hyperparameters()
         self.reset()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self._init_hyperparameters()
-        self.history_buffer_size = 1
+
+        self.history_buffer_size = 2
         self.num_of_states = 4  # center_x, center_y, area_of_diver_bb, linear_vel
         self.num_of_actions = 5
         self.obs_dim = self.num_of_states * self.history_buffer_size
@@ -481,15 +504,15 @@ class DQN_approach:
         # TAU is the update rate of the target network
         # LR is the learning rate of the AdamW optimizer
         self.BATCH_SIZE = 50
-        self.GAMMA = 0.5
+        self.GAMMA = 0.99
         self.EPS_START = 0.9
         self.EPS_END = 0.05
         self.EPS_DECAY = 1000
-        self.TAU = 0.0001
-        self.LR = 1e-6
+        self.TAU = 0.001
+        self.LR = 1e-4
 
     def reset(self):
-        self.ERM = ReplayMemory(2000)
+        self.ERM = ReplayMemory(2000,self.GAMMA, config.MAX_EPISODE)
         self.steps_done = 0
 
     def select_action(self,state):
@@ -523,7 +546,7 @@ class DQN_approach:
         # Compute a mask of non-final states and concatenate the batch elements
         # (a final state would've been the one after which simulation ended)
         try:
-            non_final_next_states = torch.tensor(batch.next_state,device=self.device, dtype=torch.float32)
+            final_next_states = torch.tensor(batch.next_state,device=self.device, dtype=torch.float32)
             state_batch = torch.tensor(batch.state, device=self.device, dtype=torch.float32)
             action_batch = torch.tensor(batch.action, device=self.device, dtype=torch.long)
             yaw_reward_batch = torch.tensor(batch.yaw_reward,device=self.device, dtype=torch.float32)
@@ -549,20 +572,42 @@ class DQN_approach:
         # on the "older" target_net; selecting their best reward with max(1)[0].
         # This is merged based on the mask, such that we'll have either the expected
         # state value or 0 in case the state was final.
+        # Compute Huber loss
+        criterion = nn.SmoothL1Loss()
 
         with torch.no_grad():
-            outputs = self.target_net(non_final_next_states)
+            outputs = self.target_net(final_next_states)
             next_state_values_yaw = outputs[0].max(1)[0]
             next_state_values_pitch = outputs[1].max(1)[0]
         # Compute the expected Q values
-        expected_state_action_values_yaw = (next_state_values_yaw * self.GAMMA) + yaw_reward_batch
-        expected_state_action_values_pitch = (next_state_values_pitch * self.GAMMA) + pitch_reward_batch
-
-        # Compute Huber loss
-        criterion = nn.SmoothL1Loss()
-        yaw_loss = criterion(state_action_values_yaw, expected_state_action_values_yaw.unsqueeze(1))
-        pitch_loss = criterion(state_action_values_pitch, expected_state_action_values_pitch.unsqueeze(1))
-
+        yaw_loss = 0
+        pitch_loss = 0
+        # TD learning
+        # for item1_yaw,item2_yaw,item3_yaw,item1_pitch,item2_pitch,item3_pitch in zip(
+        #         batch.yaw_reward, next_state_values_yaw, state_action_values_yaw,
+        #         batch.pitch_reward,next_state_values_pitch, state_action_values_pitch):
+        #     if item1_yaw is None:
+        #         expected_state_action_value_yaw = torch.tensor(-10.0, device=self.device, dtype=torch.float32)
+        #     else:
+        #         expected_state_action_value_yaw = (item2_yaw * self.GAMMA) + item1_yaw
+        #
+        #     if item1_pitch is None:
+        #         expected_state_action_value_pitch = torch.tensor(-10.0, device=self.device, dtype=torch.float32)
+        #     else:
+        #         expected_state_action_value_pitch = (item2_pitch * self.GAMMA) + item1_pitch
+        #
+        #     yaw_loss += criterion(item3_yaw, expected_state_action_value_yaw.unsqueeze(0))
+        #     pitch_loss += criterion(item3_pitch, expected_state_action_value_pitch.unsqueeze(0))
+        ######### Monte Carlo
+        # for item1_yaw,item3_yaw,item1_pitch,item3_pitch in zip(
+        #         batch.yaw_reward, state_action_values_yaw,
+        #         batch.pitch_reward, state_action_values_pitch):
+        #
+        #     print('hhhh: ',item3_yaw, item1_yaw)
+        #     yaw_loss += criterion(item3_yaw, item1_yaw.unsqueeze(0))
+        #     pitch_loss += criterion(item3_pitch, item1_pitch.unsqueeze(0))
+        yaw_loss = criterion(yaw_reward_batch, state_action_values_yaw)
+        pitch_loss = criterion(pitch_reward_batch, state_action_values_pitch)
         loss = yaw_loss + pitch_loss
 
         # Optimize the model
@@ -604,15 +649,65 @@ class DQN_approach:
 
 class ReplayMemory(object):
 
-    def __init__(self, capacity):
+    def __init__(self, capacity,gamma, max_episode = 100):
         self.memory = deque([],maxlen=capacity)
-
+        self.episode_memory = deque([],maxlen=max_episode + 1) # we add one for the terminal state
+        self.step = 0
+        self.rewards_yaw = []
+        self.rewards_pitch = []
+        self.gamma = gamma
+        self.max_episode = max_episode + 1
     def push(self, *args):
         """Save a transition"""
-        self.memory.append(Transition(*args))
+        new_data = Transition(*args)
+        self.episode_memory.append(new_data)
+
+        self.rewards_yaw.append(new_data.yaw_reward)
+        self.rewards_pitch.append(new_data.pitch_reward)
+
+        self.step += 1
     def sample(self, batch_size):
         return random.sample(self.memory, batch_size)
 
+
+    def push_and_reward_modification(self,*args):
+        # Now modify the rewards accordingly!
+
+        discount_reward_yaw = 0
+        discount_reward_pitch = 0
+        new_data = Transition(*args)
+        #('state', 'action', 'next_state', 'yaw_reward', 'pitch_reward')
+        if new_data.yaw_reward is None:
+            new_data = Transition(new_data.state, new_data.action, new_data.next_state, -10.0, new_data.pitch_reward)
+
+        if new_data.pitch_reward is None:
+            new_data = Transition(new_data.state, new_data.action, new_data.next_state, new_data.yaw_reward, -10.0)
+
+        self.episode_memory.append(new_data)
+
+        self.rewards_yaw.append(new_data.yaw_reward)
+        self.rewards_pitch.append(new_data.pitch_reward)
+
+        self.step += 1
+
+        count = 1
+        for item1,item2 in zip(reversed(self.rewards_yaw), reversed(self.rewards_pitch)):
+            discount_reward_yaw = item1 + discount_reward_yaw * self.gamma
+            discount_reward_pitch = item2 + discount_reward_pitch * self.gamma
+            self.episode_memory[-count] = Transition(self.episode_memory[-count].state, self.episode_memory[-count].action,
+                                                                self.episode_memory[-count].next_state, discount_reward_yaw, self.episode_memory[-count].pitch_reward)
+
+            self.episode_memory[-count] = Transition(self.episode_memory[-count].state, self.episode_memory[-count].action,
+                                                                self.episode_memory[-count].next_state, self.episode_memory[-count].yaw_reward, discount_reward_pitch)
+            self.memory.append(self.episode_memory[-count])
+            count += 1
+
+
+        print(self.episode_memory)
+        self.step = 0
+        self.rewards_yaw = []
+        self.rewards_pitch = []
+        self.episode_memory = deque([], maxlen=self.max_episode)
     def __len__(self):
         return len(self.memory)
 

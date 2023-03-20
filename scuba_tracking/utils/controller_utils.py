@@ -80,6 +80,7 @@ def msg_processing(msg, single_object_tracking = True):
 
     mean_of_obj_locations = -np.ones(
         3)
+    mean_of_detections_conf = 0
 
     if len(data_list) > 2:
         num_of_objs = int(data_list[0])
@@ -88,16 +89,16 @@ def msg_processing(msg, single_object_tracking = True):
               # this may include the center points and the areas covered by the objs
             for i in range(num_of_objs):
                 # just to ignore the first element as it is the num of objs ([i + 1])
-                x1, y1, x2, y2 = list(map(float, data_list[i + 1].split(',')))
+                x1, y1, x2, y2, detection_conf = list(map(float, data_list[i + 1].split(',')))
                 mean_of_obj_locations[0] += (x1 + x2) / (2 * num_of_objs)
                 mean_of_obj_locations[1] += (y1 + y2) / (2 * num_of_objs)
                 mean_of_obj_locations[2] += (y2 - y1) * (x2 - x1) / num_of_objs
-
-            return mean_of_obj_locations
+                mean_of_detections_conf += 0.01 * detection_conf/num_of_objs # the detection conf is on the interval of [0,100]
+            return mean_of_obj_locations, mean_of_detections_conf
         else:
             return 0 # TODO
     else:
-        return mean_of_obj_locations
+        return mean_of_obj_locations, mean_of_detections_conf
 
 
 def main():

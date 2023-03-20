@@ -18,7 +18,7 @@ class YoloV7:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.half = False # half precision only supported on CUDA
         self.augment = False
-        self.conf_threshold = 0.1
+        self.conf_threshold = 0.4
         self.iou_threshold = 0.2
         self.agnostic_nms = False
         self.verbose = False
@@ -112,8 +112,9 @@ class YoloV7:
                         id = track[9]
                         label = f'{cls} {conf:.2f} {id}'
                         plot_one_box(track[0:4], img0, label=label, color=self.colors[0], line_thickness=1)
-                        outputs.append([int(x1),int(y1),int(x2),int(y2)])
-                        string_output += str(int(x1)) + ',' + str(int(y1)) + ',' + str(int(x2)) + ',' + str(int(y2)) + '#'
+                        outputs.append([int(x1),int(y1),int(x2),int(y2),int(conf*100)])
+                        string_output += str(int(x1)) + ',' + str(int(y1)) + ',' + str(int(x2)) + ',' + str(int(y2)) + \
+                                         ',' + str(int(conf*100)) + '#'
                 else:
                     # Write results
                     for *xyxy, conf, cls in reversed(det):
@@ -122,8 +123,10 @@ class YoloV7:
                             if(conf > self.conf_threshold):
                                 label = f'{self.names[int(cls)]} {conf:.2f}'
                                 plot_one_box(xyxy, img0, label=label, color=self.colors[int(cls)], line_thickness=1)
-                                outputs.append([int(x1),int(y1),int(x2),int(y2)])
-                                string_output += str(int(x1)) + ',' + str(int(y1)) + ',' + str(int(x2)) + ',' + str(int(y2)) + '#'
+                                outputs.append([int(x1), int(y1), int(x2), int(y2), int(conf * 100)])
+                                string_output += str(int(x1)) + ',' + str(int(y1)) + ',' + str(int(x2)) + ',' + str(
+                                    int(y2)) + \
+                                                 ',' + str(int(conf * 100)) + '#'
             elif self.track:
                 #no detections but we still want to update trackers
                 dets_to_sort = np.empty((0,6))
@@ -136,8 +139,9 @@ class YoloV7:
                     id = track[9]
                     label = f'{cls} {conf:.2f} {id}'
                     plot_one_box(track[0:4], img0, label=label, color=self.colors[0], line_thickness=1)
-                    outputs.append([int(x1),int(y1),int(x2),int(y2)])
-                    string_output += str(int(x1)) + ',' + str(int(y1)) + ',' + str(int(x2)) + ',' + str(int(y2)) + '#'
+                    outputs.append([int(x1), int(y1), int(x2), int(y2), int(conf * 100)])
+                    string_output += str(int(x1)) + ',' + str(int(y1)) + ',' + str(int(x2)) + ',' + str(int(y2)) + \
+                                     ',' + str(int(conf * 100)) + '#'
 
             if self.verbose:
                 # Print time (inference + NMS)

@@ -86,6 +86,7 @@ class KalmanBoxTracker(object):
         self.hits += 1
         self.hit_streak += 1
         self.kf.update(convert_bbox_to_z(bbox))
+        
         self.detclass = bbox[5]
         CX = (bbox[0]+bbox[2])//2
         CY = (bbox[1]+bbox[3])//2

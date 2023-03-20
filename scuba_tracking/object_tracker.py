@@ -52,12 +52,16 @@ class object_tracker(Node):
         cv2.namedWindow("Processed frames", cv2.WINDOW_NORMAL)
         cv2.resizeWindow("Processed frames", config.IMAGE_SIZE[0], config.IMAGE_SIZE[1])
 
+        self.starting_time = time.time()
         return
 
     def image_handler(self, msg):
         img = CvBridge().compressed_imgmsg_to_cv2(msg)
         last_time = time.time()
         img = cv2.resize(img, config.IMAGE_SIZE)
+        # make the center of the image blurry
+        #if time.time() - self.starting_time>30:
+
         string_output, outputs, img_ = self.detector.detect(img)
         string_command = str(len(outputs)) + string_output
         print(time.time() - last_time)
