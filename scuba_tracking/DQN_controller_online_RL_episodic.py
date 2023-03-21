@@ -508,7 +508,7 @@ class DQN_approach:
         self.EPS_START = 0.9
         self.EPS_END = 0.05
         self.EPS_DECAY = 1000
-        self.TAU = 0.001
+        self.TAU = 0.005
         self.LR = 1e-4
 
     def reset(self):

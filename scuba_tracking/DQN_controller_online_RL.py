@@ -49,7 +49,8 @@ class reward_shaping:
         self.yaw_reward = []
         self.pitch_reward = []
     def __call__(self,current_observation, detection_conf = 0.0 ):
-        yaw_reward, pitch_reward = self.single_observation(current_observation)
+        yaw_reward, pitch_reward, combined_reward = self.single_observation(current_observation)
+        combined_reward_flag = True
         if self.k_step > 1:
 
             if len(self.yaw_reward)>(self.k_step-1):
@@ -75,8 +76,18 @@ class reward_shaping:
             variance_scaler = 0 # 200
             #
             print('variance: ',np.array(self.yaw_reward).var(), np.array(self.pitch_reward).var(), reward_conf)
-            return yaw_reward - variance_scaler * np.array(self.yaw_reward).var() + self.include_detection_confidence * reward_conf , \
-                   pitch_reward - variance_scaler * np.array(self.pitch_reward).var() + self.include_detection_confidence * reward_conf , [yaw_reward, pitch_reward, detection_conf]
+
+            if combined_reward_flag:
+                return -(1 - combined_reward) - variance_scaler * np.array(
+                    self.yaw_reward).var() + self.include_detection_confidence * reward_conf, \
+                       -(1 - combined_reward) - variance_scaler * np.array(
+                           self.pitch_reward).var() + self.include_detection_confidence * reward_conf, [yaw_reward,
+                                                                                                        pitch_reward,
+                                                                                                        detection_conf]
+
+            else:
+                return -(1 - yaw_reward) - variance_scaler * np.array(self.yaw_reward).var() + self.include_detection_confidence * reward_conf , \
+                       -(1 - pitch_reward) - variance_scaler * np.array(self.pitch_reward).var() + self.include_detection_confidence * reward_conf , [yaw_reward, pitch_reward, detection_conf]
 
         else: # this part must be modified
             if abs(current_observation[0])<self.boundaries and abs(current_observation[1])<self.boundaries :
@@ -111,7 +122,7 @@ class reward_shaping:
             yaw_reward = reward
 
             # for out of plane cases
-            if abs(current_observation[0]) > 0.9:
+            if abs(current_observation[0]) > 0.8:
                 yaw_reward = -0.1
             #####################################################################
             # pitch part
@@ -124,16 +135,18 @@ class reward_shaping:
                 # negative reward:
                 ##reward = -0.5*(abs(current_observation[1]))
             pitch_reward = reward
-            if abs(current_observation[1]) > 0.9:
+            if abs(current_observation[1]) > 0.8:
                 pitch_reward = -0.1
         except:
             print('object lost! reward = -1')
             yaw_reward = -1
             pitch_reward = -1
 
-        # general_reward = factor_*(1 / (abs(current_observation[0]) + factor_)) + factor_*(1 / (abs(current_observation[1]) + factor_))#1/(2*abs(current_observation[1])**2 +  2*abs(current_observation[0])**2 + 1)
+        general_reward = factor_*(1 / (abs(current_observation[0]) + factor_)) + factor_*(1 / (abs(current_observation[1]) + factor_))#1/(2*abs(current_observation[1])**2 +  2*abs(current_observation[0])**2 + 1)
+
         # general_reward, general_reward
-        return yaw_reward, pitch_reward
+
+        return yaw_reward, pitch_reward, general_reward#yaw_reward, pitch_reward
 
 
 class controller(Node):
@@ -366,14 +379,14 @@ class controller(Node):
             self.RL_controller.ERM.push(self.previous_state, self.previous_action, next_state, yaw_reward, pitch_reward)
             if self.sample_counter % 100 == 0:
                 #self.rewards_list
-                name = 'VAR_rewards_his2_2'
+                name = 'combined_rewards_his2_1'
                 np.save(self.RL_controller.path_to_gathered_data +name, self.rewards_list)
                 #np.save(self.RL_controller.path_to_gathered_data + str(self.RL_controller.num_of_experiments), self.RL_controller.ERM.memory)
 
                 print('The overall performance: ',np.mean(np.array(self.rewards_list),0))
 
                 np.save(self.RL_controller.path_to_gathered_data + name + '_traj', self.trajectory)
-            if self.sample_counter % 10 == 0:
+            if self.sample_counter % 1 == 0:
                 self.RL_controller.learn()
 
             # the sample counter is used to update a random target for the PID controllers
@@ -486,8 +499,8 @@ class DQN_approach:
         self.EPS_START = 0.9
         self.EPS_END = 0.05
         self.EPS_DECAY = 1000
-        self.TAU = 0.0001
-        self.LR = 1e-6
+        self.TAU = 0.005
+        self.LR = 1e-4
 
     def reset(self):
         self.ERM = ReplayMemory(2000)
@@ -498,7 +511,7 @@ class DQN_approach:
         sample = random.random()
         eps_threshold = self.EPS_END + (self.EPS_START - self.EPS_END) * \
                         math.exp(-1. * self.steps_done / self.EPS_DECAY)
-        if np.random.rand()>0.2: #sample > eps_threshold:
+        if np.random.rand()>0.1: #sample > eps_threshold:
             with torch.no_grad():
                 # t.max(1) will return largest column value of each row.
                 # second column on max result is index of where max element was
@@ -558,6 +571,12 @@ class DQN_approach:
         # Compute the expected Q values
         expected_state_action_values_yaw = (next_state_values_yaw * self.GAMMA) + yaw_reward_batch
         expected_state_action_values_pitch = (next_state_values_pitch * self.GAMMA) + pitch_reward_batch
+        print('Yaw: ')
+        print(state_action_values_yaw)
+        print(expected_state_action_values_yaw)
+        print('Pitch: ')
+        print(state_action_values_pitch)
+        print(expected_state_action_values_pitch)
 
         # Compute Huber loss
         criterion = nn.SmoothL1Loss()
@@ -610,6 +629,7 @@ class ReplayMemory(object):
 
     def push(self, *args):
         """Save a transition"""
+
         self.memory.append(Transition(*args))
     def sample(self, batch_size):
         return random.sample(self.memory, batch_size)
