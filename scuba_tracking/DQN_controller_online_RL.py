@@ -228,7 +228,7 @@ class controller(Node):
         self.obs = np.zeros(
             self.RL_controller.history_buffer_size * self.RL_controller.num_of_states
         )
-        self.previous_action = []
+        self.previous_action = 0
         self.previous_state = []
 
         self.RL_actions_list_yaw = np.linspace(
@@ -275,13 +275,12 @@ class controller(Node):
             self.rightSideChecked = False
             self.upSideChecked = False
 
-    def get_action(self, yaw_rate, pitch_rate, discrete=True):
-        if discrete:
-            yaw_rate = np.argmin(abs(yaw_rate - self.RL_actions_list_yaw))
-            pitch_rate = np.argmin(abs(pitch_rate - self.RL_actions_list_pitch))
-            return yaw_rate, pitch_rate
-        else:
-            return yaw_rate, pitch_rate
+    def get_action_index(self, yaw_rate, pitch_rate):
+        yaw_rate_index = np.argmin(abs(yaw_rate - self.RL_actions_list_yaw))
+        pitch_rate_index = np.argmin(abs(pitch_rate - self.RL_actions_list_pitch))
+        index = self.RL_controller.discrete_actions_resolution * yaw_rate_index
+        index += pitch_rate_index
+        return index
 
     def data_handler(self, msg):
         yaw_ref = 0.0
@@ -503,7 +502,7 @@ class controller(Node):
         self.previous_state = (
             self.previous_state + self.obs
         )  # TODO check this!!!! to be updated
-        self.previous_action_discrete = self.get_action(yaw_ref, pitch_ref)
+        self.previous_action_discrete = self.get_action_index(yaw_ref, pitch_ref)
         # print('locations: ',mean_of_obj_locations)
 
     # for log purposes
