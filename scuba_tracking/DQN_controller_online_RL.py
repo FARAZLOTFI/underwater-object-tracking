@@ -662,10 +662,10 @@ class DQN_approach:
         # (a final state would've been the one after which simulation ended)
         try:
             non_final_next_states = torch.tensor(
-                batch.next_state, device=self.device, dtype=torch.float32
+                np.array(batch.next_state), device=self.device, dtype=torch.float32
             )
             state_batch = torch.tensor(
-                batch.state, device=self.device, dtype=torch.float32
+                np.array(batch.state), device=self.device, dtype=torch.float32
             )
             action_batch = torch.tensor(
                 batch.action, device=self.device, dtype=torch.long
@@ -684,7 +684,9 @@ class DQN_approach:
         # columns of actions taken. These are the actions which would've been taken
         # for each batch state according to policy_net
 
-        state_action_values = self.policy_net(state_batch)
+        state_action_values = self.policy_net(state_batch).gather(
+            1, action_batch.unsqueeze(dim=-1)
+        )
 
         # Compute V(s_{t+1}) for all next states.
         # Expected values of actions for non_final_next_states are computed based
@@ -696,7 +698,6 @@ class DQN_approach:
             outputs = self.target_net(non_final_next_states)
             next_state_values = outputs.max(1)[0]
         # Compute the expected Q values
-        # JF FIXME TODO I guess just add both??
         expected_state_action_values = (
             (next_state_values * self.GAMMA) + yaw_reward_batch + pitch_reward_batch
         )
