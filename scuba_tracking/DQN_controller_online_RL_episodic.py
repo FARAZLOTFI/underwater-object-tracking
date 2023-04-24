@@ -51,8 +51,8 @@ class reward_shaping:
         self.flag_done = False
         self.sample_step = 0
     def __call__(self,current_observation, detection_conf = 0.0 ):
-        yaw_reward, pitch_reward = self.single_observation(current_observation)
-
+        yaw_reward, pitch_reward, combined_reward = self.single_observation(current_observation)
+        combined_reward_flag = True
         if self.k_step > 1:
 
             if len(self.yaw_reward)>(self.k_step-1):
@@ -77,8 +77,8 @@ class reward_shaping:
             scaler = 0
             #
             print('variance: ',np.array(self.yaw_reward).var(), np.array(self.pitch_reward).var(), reward_conf)
-            return yaw_reward - scaler * np.array(self.yaw_reward).var() + self.include_detection_confidence * reward_conf , \
-                   pitch_reward - scaler * np.array(self.pitch_reward).var() + self.include_detection_confidence * reward_conf , [yaw_reward, pitch_reward, detection_conf],self.flag_done
+            return combined_reward - scaler * np.array(self.yaw_reward).var() + self.include_detection_confidence * reward_conf , \
+                   combined_reward - scaler * np.array(self.pitch_reward).var() + self.include_detection_confidence * reward_conf , [yaw_reward, pitch_reward, detection_conf],self.flag_done
 
         else: # this part must be modified
 
@@ -106,8 +106,10 @@ class reward_shaping:
                         pitch_reward = None
 
                 self.sample_step = 0
-
-                return yaw_reward, pitch_reward, [yaw_reward, pitch_reward],self.flag_done
+                if combined_reward_flag:
+                    return combined_reward,combined_reward,[yaw_reward, pitch_reward],self.flag_done
+                else:
+                    return yaw_reward, pitch_reward, [yaw_reward, pitch_reward],self.flag_done
 
 
     def single_observation(self, current_observation):
@@ -145,9 +147,9 @@ class reward_shaping:
             yaw_reward = -1
             pitch_reward = -1
 
-        # general_reward = factor_*(1 / (abs(current_observation[0]) + factor_)) + factor_*(1 / (abs(current_observation[1]) + factor_))#1/(2*abs(current_observation[1])**2 +  2*abs(current_observation[0])**2 + 1)
+        general_reward = factor_*(1 / (abs(current_observation[0]) + factor_)) + factor_*(1 / (abs(current_observation[1]) + factor_))#1/(2*abs(current_observation[1])**2 +  2*abs(current_observation[0])**2 + 1)
         # general_reward, general_reward
-        return yaw_reward, pitch_reward
+        return yaw_reward, pitch_reward, general_reward
 
 
 class controller(Node):
@@ -263,8 +265,8 @@ class controller(Node):
         else:
             # Otherwise, for exploration purposes
             if self.sample_counter%100 == 0 :
-                self.target_x = np.random.randint(0.1*self.image_size[0], 0.9*self.image_size[0])
-                self.target_y = np.random.randint(0.1*self.image_size[1], 0.9*self.image_size[1])
+                self.target_x = np.random.randint(0.2*self.image_size[0], 0.8*self.image_size[0])
+                self.target_y = np.random.randint(0.2*self.image_size[1], 0.8*self.image_size[1])
                 self.target_area = np.random.randint(0.8*self.BB_THRESH, self.BB_THRESH)
                 print('Target updated! ',[self.target_x,self.target_y,self.target_area])
 
@@ -395,7 +397,7 @@ class controller(Node):
                 ##print('The overall performance: ',np.mean(np.array(self.rewards_list),0))
 
                 np.save(self.RL_controller.path_to_gathered_data + name + '_traj', self.trajectory)
-            if self.sample_counter % 10 == 0:
+            if self.sample_counter % 1 == 0:
                 self.RL_controller.learn()
 
             # the sample counter is used to update a random target for the PID controllers
@@ -509,7 +511,7 @@ class DQN_approach:
         self.EPS_END = 0.05
         self.EPS_DECAY = 1000
         self.TAU = 0.005
-        self.LR = 1e-4
+        self.LR = 1e-5
 
     def reset(self):
         self.ERM = ReplayMemory(2000,self.GAMMA, config.MAX_EPISODE)
@@ -566,7 +568,6 @@ class DQN_approach:
         state_action_values = self.policy_net(state_batch)
         state_action_values_yaw = state_action_values[0].gather(1, action_batch[:,0].unsqueeze(-1))
         state_action_values_pitch = state_action_values[1].gather(1, action_batch[:,1].unsqueeze(-1))
-
         # Compute V(s_{t+1}) for all next states.
         # Expected values of actions for non_final_next_states are computed based
         # on the "older" target_net; selecting their best reward with max(1)[0].
@@ -606,6 +607,9 @@ class DQN_approach:
         #     print('hhhh: ',item3_yaw, item1_yaw)
         #     yaw_loss += criterion(item3_yaw, item1_yaw.unsqueeze(0))
         #     pitch_loss += criterion(item3_pitch, item1_pitch.unsqueeze(0))
+        print('yaw_reward: ')
+        print(state_action_values_yaw)
+        print(yaw_reward_batch)
         yaw_loss = criterion(yaw_reward_batch, state_action_values_yaw)
         pitch_loss = criterion(pitch_reward_batch, state_action_values_pitch)
         loss = yaw_loss + pitch_loss

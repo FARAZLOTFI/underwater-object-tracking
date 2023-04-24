@@ -62,7 +62,7 @@ class reward_shaping:
             else:
                 self.yaw_reward.append(yaw_reward)
                 self.pitch_reward.append(pitch_reward)
-
+################################################################
             if self.include_detection_confidence > 0:
                 if detection_conf > 0.8:
                     reward_conf = 1.0
@@ -72,22 +72,24 @@ class reward_shaping:
                     reward_conf = 0.0
             else:
                 reward_conf = 0.0
-
+            ################# for confidence study #######################
+            ####reward_conf = detection_conf
+            #######################################
             variance_scaler = 0 # 200
             #
             print('variance: ',np.array(self.yaw_reward).var(), np.array(self.pitch_reward).var(), reward_conf)
 
             if combined_reward_flag:
-                return -(1 - combined_reward) - variance_scaler * np.array(
+                return combined_reward - variance_scaler * np.array(
                     self.yaw_reward).var() + self.include_detection_confidence * reward_conf, \
-                       -(1 - combined_reward) - variance_scaler * np.array(
+                       combined_reward - variance_scaler * np.array(
                            self.pitch_reward).var() + self.include_detection_confidence * reward_conf, [yaw_reward,
                                                                                                         pitch_reward,
                                                                                                         detection_conf]
 
             else:
-                return -(1 - yaw_reward) - variance_scaler * np.array(self.yaw_reward).var() + self.include_detection_confidence * reward_conf , \
-                       -(1 - pitch_reward) - variance_scaler * np.array(self.pitch_reward).var() + self.include_detection_confidence * reward_conf , [yaw_reward, pitch_reward, detection_conf]
+                return yaw_reward - variance_scaler * np.array(self.yaw_reward).var() + self.include_detection_confidence * reward_conf , \
+                       pitch_reward - variance_scaler * np.array(self.pitch_reward).var() + self.include_detection_confidence * reward_conf , [yaw_reward, pitch_reward, detection_conf]
 
         else: # this part must be modified
             if abs(current_observation[0])<self.boundaries and abs(current_observation[1])<self.boundaries :
@@ -196,6 +198,7 @@ class controller(Node):
         self.RL_controller = DQN_approach()
         self.obs = np.zeros(self.RL_controller.history_buffer_size * self.RL_controller.num_of_states)
         self.previous_action = []
+        self.action_for_observation = np.zeros(2)
         self.previous_state = []
 
         self.RL_actions_list_yaw = np.linspace(config.MIN_YAW_RATE, config.MAX_YAW_RATE, self.RL_controller.num_of_actions, True)
@@ -262,8 +265,8 @@ class controller(Node):
         else:
             # Otherwise, for exploration purposes
             if self.sample_counter%100 == 0 :
-                self.target_x = np.random.randint(0.1*self.image_size[0], 0.9*self.image_size[0])
-                self.target_y = np.random.randint(0.1*self.image_size[1], 0.9*self.image_size[1])
+                self.target_x = np.random.randint(0.2*self.image_size[0], 0.8*self.image_size[0])
+                self.target_y = np.random.randint(0.2*self.image_size[1], 0.8*self.image_size[1])
                 self.target_area = np.random.randint(0.8*self.BB_THRESH, self.BB_THRESH)
                 print('Target updated! ',[self.target_x,self.target_y,self.target_area])
 
@@ -317,10 +320,15 @@ class controller(Node):
         speed_noise = 0.05 * np.random.rand() # 3
         detection_confidence_noise = 0.1 * (np.random.rand() - 0.5)
 
+        action_noise_yaw = 0.1 * (np.random.rand() - 0.5)
+        action_noise_pitch = 0.1 * (np.random.rand() - 0.5)
+
         current_observation = np.array([mean_of_obj_locations[0] + bb_noise_x,
                                         mean_of_obj_locations[1] + bb_noise_y,
                                         mean_of_obj_locations[2] + area_noise,
-                                        speed_ref + speed_noise])
+                                        speed_ref + speed_noise,
+                                        self.action_for_observation[0]/config.MAX_YAW_RATE + action_noise_yaw,
+                                        self.action_for_observation[1]/config.MAX_PITCH_RATE + action_noise_pitch])
 
         # now normalization
         # TODO no normalization on the  velocities :| lin_vel > 1 ???!
@@ -335,7 +343,7 @@ class controller(Node):
         
 
         ############# check the situation to be controllable by RL at low risk of losing the target #############
-        PID_con_contribution = 0.5# max -> 0.5
+        PID_con_contribution = 0.0# max -> 0.5
         PID_random_contribution = 0.0 # max -> 1
         if ((PID_con_contribution * self.image_size[0] < mean_of_obj_locations[0] < (1-PID_con_contribution) * self.image_size[0]) and
                 (PID_con_contribution * self.image_size[1] < mean_of_obj_locations[1] < (1-PID_con_contribution) * self.image_size[1])) \
@@ -349,7 +357,7 @@ class controller(Node):
         self.direct_command.yaw = yaw_ref #>0 right
         self.direct_command.pitch = pitch_ref #>0 down
         self.direct_command.speed = speed_ref
-        self.direct_command.roll = 0.0 * (np.random.rand() - 1)
+        self.direct_command.roll = 0.0 #* (np.random.rand() - 1)
         if self.debug:
             print('speed ref: ', speed_ref)
             pass
@@ -361,7 +369,31 @@ class controller(Node):
             self.direct_command.speed = 0.0
             self.direct_command.roll = 0.0
         ####################################################################################
+        ############################################################ For confidence #############################
+        # if True: #self.sample_counter>2000:
+        #     if current_observation[0]<0 or current_observation[0]>0.8:
+        #         detection_confidence = -1
+        #     else:
+        #         detection_confidence = 1
 
+
+        ############################################################ For delay study ############################
+        # yaw_ref = 0.0
+        # pitch_ref = 0.0
+        # if self.sample_counter<50:
+        #     yaw_ref = 0.0
+        #     pitch_ref = 0.0
+        #
+        # else:
+        #     yaw_ref = 0.0
+        #     pitch_ref = 0.1
+        #
+        # self.direct_command.yaw = yaw_ref
+        # self.direct_command.pitch = pitch_ref
+        # self.direct_command.speed = 0.5
+        # self.direct_command.roll = 0.0
+
+        ###########################################################################################################
         self.command_publisher.publish(self.direct_command)
         self.current_state_publisher.publish(msg)
 
@@ -379,9 +411,11 @@ class controller(Node):
             self.RL_controller.ERM.push(self.previous_state, self.previous_action, next_state, yaw_reward, pitch_reward)
             if self.sample_counter % 100 == 0:
                 #self.rewards_list
-                name = 'combined_rewards_his2_1'
+                name = 'faulty_scenario_his20_RL'
+                ##name = 'PID_angular_drag_2'
+                ##name = 'delay_analysis_pitch'
                 np.save(self.RL_controller.path_to_gathered_data +name, self.rewards_list)
-                #np.save(self.RL_controller.path_to_gathered_data + str(self.RL_controller.num_of_experiments), self.RL_controller.ERM.memory)
+                np.save(self.RL_controller.path_to_gathered_data +name + '_observations' , self.RL_controller.ERM.memory) # str(self.RL_controller.num_of_experiments)
 
                 print('The overall performance: ',np.mean(np.array(self.rewards_list),0))
 
@@ -395,6 +429,8 @@ class controller(Node):
         self.previous_state = np.zeros(len(self.obs))
         self.previous_state = self.previous_state + self.obs #TODO check this!!!! to be updated
         self.previous_action = self.get_action(yaw_ref, pitch_ref)
+
+        self.action_for_observation = [yaw_ref,pitch_ref]
         #print('locations: ',mean_of_obj_locations)
 
     # for log purposes
@@ -448,8 +484,8 @@ class DQN_approach:
         self.reset()
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self._init_hyperparameters()
-        self.history_buffer_size = 2
-        self.num_of_states = 4  # center_x, center_y, area_of_diver_bb, linear_vel
+        self.history_buffer_size = 20
+        self.num_of_states = 6  # center_x, center_y, area_of_diver_bb, linear_vel
         self.num_of_actions = 5
         self.obs_dim = self.num_of_states * self.history_buffer_size
         self.act_dim = self.num_of_actions
@@ -474,6 +510,7 @@ class DQN_approach:
             print('Weights loaded!')
         except:
             print('No checkpoint found!')
+            input(' Training from scratch, is it ok?')
             self.starting_episode = 0
 
         self.writer_train = SummaryWriter('./runs/training')
@@ -511,7 +548,7 @@ class DQN_approach:
         sample = random.random()
         eps_threshold = self.EPS_END + (self.EPS_START - self.EPS_END) * \
                         math.exp(-1. * self.steps_done / self.EPS_DECAY)
-        if np.random.rand()>0.1: #sample > eps_threshold:
+        if np.random.rand()>0.4: #sample > eps_threshold:
             with torch.no_grad():
                 # t.max(1) will return largest column value of each row.
                 # second column on max result is index of where max element was
@@ -631,6 +668,7 @@ class ReplayMemory(object):
         """Save a transition"""
 
         self.memory.append(Transition(*args))
+
     def sample(self, batch_size):
         return random.sample(self.memory, batch_size)
 
