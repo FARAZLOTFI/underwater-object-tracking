@@ -1,8 +1,3 @@
-"""
-	This file contains a neural network module for us to
-	define our actor and critic networks in PPO.
-"""
-
 import torch
 from torch import nn
 import torch.nn.functional as F
