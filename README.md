@@ -8,3 +8,20 @@ We divide the underwater tracking task into vision and control modules. We use e
 Here is a video of our real-world test:
 
 https://github.com/FARAZLOTFI/underwater_object_tracking/assets/44290848/9f5f66bb-d467-46de-9e1e-442ab84b6a18
+
+
+This repo contains a ROS2 package that can be added to a workspace. 
+
+Code structure:
+
+*RL_network - The RL agent neural network model 
+
+*DQN_controller_online_RL.py - Main code to run the algorithm 
+
+*classic_controller_offpolicy.py - This is used to run PIDs to control the robot and gather dataset for offline RL
+
+*gathering_dataset.py - This controls the robot manaully through keyboard where one can capture images, as well
+
+*object_tracker.py - this is a the implemented vision module 
+
+There is a "config" folder where config.py exists along with a guiding file named "topics in realworld". Changin this config file will allow us to use the same codes in realworld. 
